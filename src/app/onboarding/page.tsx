@@ -1,11 +1,11 @@
 'use client';
 
-import DesignV1 from '@/components/home/DesignV1';
+import OnboardingAssessment from '@/components/onboarding/OnboardingAssessment';
 import { tokens } from '@/lib/tokens';
 
-export default function HomePage() {
+export default function OnboardingPage() {
   return (
-    <DesignV1
+    <OnboardingAssessment
       tweaks={{
         primary: tokens.primary,
         primaryDark: tokens.primaryDark,
