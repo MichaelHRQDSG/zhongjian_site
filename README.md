@@ -15,7 +15,8 @@ Next.js 实现版本，视觉与交互对齐设计稿
 | 路由 | 说明 |
 |------|------|
 | `/` | 首页（通知条、导航、Hero、数据条、核心服务、心理知识库、预约咨询、理念、页脚） |
-| `/onboarding` | 新员工入职测评完整流程（欢迎 → 知情同意 → 基础信息 → 5 个量表 → 完成 → 报告） |
+| `/onboarding` | 企业专属链接提示页，不直接公开量表 |
+| `/onboarding/[slug]` | 按企业后缀加载后台授权的私有量表 |
 
 首页锚点：
 
@@ -32,6 +33,14 @@ npm run dev
 ```
 
 浏览器打开 [http://localhost:3000](http://localhost:3000)。
+
+企业量表接口通过环境变量配置：
+
+```bash
+ASSESSMENT_API_BASE_URL=http://127.0.0.1:8000
+```
+
+管理后台创建的企业链接应使用 `/onboarding/企业后缀` 形式。
 
 生产构建：
 
@@ -51,7 +60,8 @@ zhongjian_site/
 │   │   ├── globals.css     # Design Tokens + 响应式覆盖
 │   │   ├── page.tsx        # 首页
 │   │   └── onboarding/
-│   │       └── page.tsx    # 入职测评
+│   │       ├── page.tsx    # 企业专属入口提示
+│   │       └── [slug]/page.tsx # 企业私有量表
 │   ├── components/
 │   │   ├── shared/data.tsx # 文案数据、Icon、CitySkyline
 │   │   ├── home/DesignV1.tsx
@@ -92,8 +102,8 @@ zhongjian_site/
 
 ## 入职测评状态
 
-- 当前步骤写入 `localStorage['onb-step']`
-- 量表为演示题量（非完整临床题库）
+- 当前步骤按企业写入独立的 `localStorage` 键
+- 量表由后台企业定制配置按链接后缀动态加载
 - 报告页为前端预览示意，未接后端评分 API
 
 ## 后续可接入 API（建议）

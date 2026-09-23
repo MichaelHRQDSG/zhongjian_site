@@ -8,17 +8,20 @@ import type { ThemeTweaks } from '@/lib/tokens';
 // 新员工入职测评 · 完整流程页面
 // 6 个步骤：欢迎 → 说明 → 基础信息 → 量表答题 → 提交完成 → 报告预览
 
-const OnboardingAssessment = ({ tweaks }: { tweaks?: ThemeTweaks }) => {
+const OnboardingAssessment = ({ tweaks, scales, companyName }: { tweaks?: ThemeTweaks; scales?: unknown[]; companyName?: string }) => {
   const primary = tweaks?.primary || '#1E4C9A';
   const primaryDark = tweaks?.primaryDark || '#0F2E5F';
   const accent = tweaks?.accent || '#C8161D';
   const warm = tweaks?.warm || '#F5EFE6';
+  const activeScales = Array.isArray(scales) && scales.length > 0 ? scales : SCALES;
+  const activeQuestionCount = activeScales.reduce((total, scale) => total + (scale.items?.length || 0), 0);
+  const progressKey = `onb-step-${companyName || 'default'}`;
 
   // step: 'welcome' | 'consent' | 'basic' | 'scale' | 'complete' | 'report'
   const [step, setStep] = React.useState(() => {
     try {
       if (typeof window === 'undefined') return 'welcome';
-      return localStorage.getItem('onb-step') || 'welcome';
+      return localStorage.getItem(progressKey) || 'welcome';
     } catch {
       return 'welcome';
     }
@@ -27,8 +30,8 @@ const OnboardingAssessment = ({ tweaks }: { tweaks?: ThemeTweaks }) => {
   const [answers, setAnswers] = React.useState({});
 
   React.useEffect(() => {
-    try { localStorage.setItem('onb-step', step); } catch {}
-  }, [step]);
+    try { localStorage.setItem(progressKey, step); } catch {}
+  }, [progressKey, step]);
 
   const goto = (s) => { setStep(s); window.scrollTo({ top: 0, behavior: 'smooth' }); };
 
@@ -40,7 +43,7 @@ const OnboardingAssessment = ({ tweaks }: { tweaks?: ThemeTweaks }) => {
       fontFamily: '"Noto Sans SC", "PingFang SC", system-ui, sans-serif',
     }}>
       {/* 顶部导航 */}
-      <OnbHeader primary={primary} primaryDark={primaryDark} step={step}/>
+      <OnbHeader primary={primary} primaryDark={primaryDark} step={step} companyName={companyName}/>
 
       {/* 步骤条 */}
       {step !== 'welcome' && step !== 'complete' && step !== 'report' && (
@@ -49,12 +52,12 @@ const OnboardingAssessment = ({ tweaks }: { tweaks?: ThemeTweaks }) => {
 
       {/* 主内容区 */}
       <main className="gxa-onb-main" style={{ maxWidth: 1120, margin: '0 auto', padding: '40px 40px 120px' }}>
-        {step === 'welcome' && <StepWelcome primary={primary} primaryDark={primaryDark} accent={accent} onNext={() => goto('consent')}/>}
+        {step === 'welcome' && <StepWelcome assessmentCount={activeScales.length} primary={primary} primaryDark={primaryDark} accent={accent} onNext={() => goto('consent')}/>}
         {step === 'consent' && <StepConsent primary={primary} primaryDark={primaryDark} accent={accent} onNext={() => goto('basic')} onBack={() => goto('welcome')}/>}
         {step === 'basic' && <StepBasic primary={primary} primaryDark={primaryDark} onNext={() => { setScaleIdx(0); goto('scale'); }} onBack={() => goto('consent')}/>}
-        {step === 'scale' && <StepScale primary={primary} primaryDark={primaryDark} scaleIdx={scaleIdx} setScaleIdx={setScaleIdx} onComplete={() => goto('complete')} onBack={() => goto('basic')}/>}
+        {step === 'scale' && <StepScale scales={activeScales} primary={primary} primaryDark={primaryDark} scaleIdx={scaleIdx} setScaleIdx={setScaleIdx} onComplete={() => goto('complete')} onBack={() => goto('basic')}/>}
         {step === 'complete' && <StepComplete primary={primary} primaryDark={primaryDark} accent={accent} onNext={() => goto('report')}/>}
-        {step === 'report' && <StepReport primary={primary} primaryDark={primaryDark} accent={accent} warm={warm}/>}
+        {step === 'report' && <StepReport assessmentCount={activeScales.length} questionCount={activeQuestionCount} primary={primary} primaryDark={primaryDark} accent={accent} warm={warm}/>}
       </main>
 
       {/* 底部 */}
@@ -64,14 +67,14 @@ const OnboardingAssessment = ({ tweaks }: { tweaks?: ThemeTweaks }) => {
 };
 
 // ==================== 顶部导航 ====================
-const OnbHeader = ({ primary, primaryDark, step }) => (
+const OnbHeader = ({ primary, primaryDark, step, companyName }) => (
   <header style={{ background: '#fff', borderBottom: '1px solid #E8ECF3', position: 'sticky', top: 0, zIndex: 50 }}>
     <div style={{ maxWidth: 1360, margin: '0 auto', padding: '16px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
       <a href="/" style={{ display: 'flex', alignItems: 'center', gap: 14, textDecoration: 'none', color: 'inherit' }}>
         <img src="/assets/guangsha-xinan-logo.jpg" alt="" style={{ height: 44, width: 44, borderRadius: 6 }}/>
         <div>
           <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: 2, color: primary, fontFamily: '"Noto Serif SC", serif' }}>广厦心安</div>
-          <div style={{ fontSize: 11, color: '#4A5A78', letterSpacing: 1, marginTop: 2 }}>新员工入职测评</div>
+          <div style={{ fontSize: 11, color: '#4A5A78', letterSpacing: 1, marginTop: 2 }}>{companyName ? `${companyName} · 专属测评` : '新员工入职测评'}</div>
         </div>
       </a>
       <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
@@ -137,7 +140,7 @@ const OnbFooter = ({ primary, accent }) => (
 );
 
 // ==================== Step 1: 欢迎页 ====================
-const StepWelcome = ({ primary, primaryDark, accent, onNext }) => (
+const StepWelcome = ({ assessmentCount, primary, primaryDark, accent, onNext }) => (
   <div className="gxa-onb-welcome" style={{ display: 'grid', gridTemplateColumns: '1.15fr 1fr', gap: 80, alignItems: 'center', minHeight: 620 }}>
     <div>
       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, background: '#fff', border: `1px solid ${primary}20`, padding: '8px 16px', borderRadius: 40, fontSize: 13, color: primary, marginBottom: 32 }}>
@@ -168,7 +171,7 @@ const StepWelcome = ({ primary, primaryDark, accent, onNext }) => (
         {[
           { icon: 'clock', title: '仅需 30 分钟', desc: '可分次完成' },
           { icon: 'lock', title: '严格保密', desc: '不进入人事档案' },
-          { icon: 'chart', title: '专业量表', desc: '5 个国际标准工具' },
+          { icon: 'chart', title: '专业量表', desc: `${assessmentCount} 个企业授权量表` },
           { icon: 'sparkle', title: '个性化报告', desc: '含咨询师匹配' },
         ].map(f => (
           <div key={f.title} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -486,8 +489,8 @@ const SCALES = [
   },
 ];
 
-const StepScale = ({ primary, primaryDark, scaleIdx, setScaleIdx, onComplete, onBack }) => {
-  const scale = SCALES[scaleIdx];
+const StepScale = ({ scales, primary, primaryDark, scaleIdx, setScaleIdx, onComplete, onBack }) => {
+  const scale = scales[scaleIdx];
   const [answers, setAnswers] = React.useState({});
   const answered = Object.keys(answers).length;
   const isComplete = answered >= scale.demoTotal;
@@ -497,7 +500,7 @@ const StepScale = ({ primary, primaryDark, scaleIdx, setScaleIdx, onComplete, on
   React.useEffect(() => { setAnswers({}); }, [scaleIdx]);
 
   const nextScale = () => {
-    if (scaleIdx < SCALES.length - 1) {
+    if (scaleIdx < scales.length - 1) {
       setScaleIdx(scaleIdx + 1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
@@ -517,7 +520,7 @@ const StepScale = ({ primary, primaryDark, scaleIdx, setScaleIdx, onComplete, on
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
       {/* 量表切换指示 */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-        {SCALES.map((s, i) => (
+        {scales.map((s, i) => (
           <div key={s.id} style={{
             flex: 1, height: 4, borderRadius: 2,
             background: i < scaleIdx ? primary : (i === scaleIdx ? `linear-gradient(90deg, ${primary} ${(answered / scale.demoTotal) * 100}%, #E8ECF3 ${(answered / scale.demoTotal) * 100}%)` : '#E8ECF3'),
@@ -526,9 +529,9 @@ const StepScale = ({ primary, primaryDark, scaleIdx, setScaleIdx, onComplete, on
       </div>
 
       <StepIntro
-        eyebrow={`第 3 步 · 量表 ${scaleIdx + 1} / ${SCALES.length}`}
+        eyebrow={`第 3 步 · 量表 ${scaleIdx + 1} / ${scales.length}`}
         title={scale.name}
-        desc={`${scale.subtitle} · 演示版仅展示 ${scale.demoTotal} 题，实际 ${scale.total} 题 · 约 ${scale.dur}`}
+        desc={`${scale.subtitle} · 共 ${scale.total} 题 · 约 ${scale.dur}`}
         primary={primary}
       />
 
@@ -544,14 +547,30 @@ const StepScale = ({ primary, primaryDark, scaleIdx, setScaleIdx, onComplete, on
                 <div style={{ width: 26, height: 26, borderRadius: '50%', background: primary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
                   {i + 1}
                 </div>
-                {scale.scale === 'binary' ? (
+                {scale.scale === 'dynamic' ? (
+                  <div style={{ flex: 1, fontSize: 15, color: '#0F2E5F', lineHeight: 1.7 }}>{item.text}</div>
+                ) : scale.scale === 'binary' ? (
                   <div style={{ flex: 1, fontSize: 15, color: '#0F2E5F', lineHeight: 1.7 }}>请选择更符合你的选项</div>
                 ) : (
                   <div style={{ flex: 1, fontSize: 15, color: '#0F2E5F', lineHeight: 1.7 }}>{item}</div>
                 )}
               </div>
 
-              {scale.scale === 'binary' ? (
+              {scale.scale === 'dynamic' ? (
+                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(item.options.length, 5)}, 1fr)`, gap: 8, paddingLeft: 38 }}>
+                  {item.options.map((option, oi) => (
+                    <button key={option.id || oi} onClick={() => setAns(i, option.id || oi)} style={{
+                      padding: '12px 8px', textAlign: 'center',
+                      background: answers[i] === (option.id || oi) ? primary : '#fff',
+                      color: answers[i] === (option.id || oi) ? '#fff' : '#4A5A78',
+                      border: answers[i] === (option.id || oi) ? `1.5px solid ${primary}` : '1.5px solid #E8ECF3',
+                      borderRadius: 4, cursor: 'pointer', fontSize: 13,
+                    }}>
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              ) : scale.scale === 'binary' ? (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   {[item.a, item.b].map((opt, oi) => (
                     <button key={oi} onClick={() => setAns(i, oi)} style={{
@@ -611,7 +630,7 @@ const StepScale = ({ primary, primaryDark, scaleIdx, setScaleIdx, onComplete, on
         nextDisabled={!isComplete}
         primary={primary}
         backLabel={scaleIdx === 0 ? '返回基础信息' : `上一个量表`}
-        nextLabel={scaleIdx === SCALES.length - 1 ? '完成所有量表 →' : `下一个量表 →`}
+        nextLabel={scaleIdx === scales.length - 1 ? '完成所有量表 →' : `下一个量表 →`}
       />
     </div>
   );
@@ -675,7 +694,7 @@ const StepComplete = ({ primary, primaryDark, accent, onNext }) => {
 };
 
 // ==================== Step 6: 报告预览 ====================
-const StepReport = ({ primary, primaryDark, accent, warm }) => {
+const StepReport = ({ assessmentCount, questionCount, primary, primaryDark, accent, warm }) => {
   const dimensions = [
     { name: '心理健康', score: 82, level: '良好', color: '#22A879', angle: -90, note: '整体情绪平稳，抗压能力较强' },
     { name: '性格倾向', score: 76, level: 'ENFJ', color: primary, angle: -30, note: '主人公型 · 富有共情力的团队协作者' },
@@ -716,7 +735,7 @@ const StepReport = ({ primary, primaryDark, accent, warm }) => {
             <div style={{ display: 'flex', gap: 24, marginTop: 24, fontSize: 13, opacity: .85 }}>
               <span>生成于 2026-09-11 14:32</span>
               <span>•</span>
-              <span>基于 5 大量表 · 118 项作答</span>
+              <span>基于 {assessmentCount} 个量表 · {questionCount} 项作答</span>
               <span>•</span>
               <span>加密存储于 EAP 独立系统</span>
             </div>
