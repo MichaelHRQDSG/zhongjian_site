@@ -24,17 +24,26 @@ export interface EnterpriseAssessmentPayload extends SiteBranding {
 
 const API_BASE_URL = (
   process.env.ASSESSMENT_API_BASE_URL
+  || process.env.MINI_PRODUCTION_API_BASE_URL
   || process.env.NEXT_PUBLIC_API_BASE_URL
   || "http://127.0.0.1:8000"
 ).replace(/\/$/, "");
 
 export async function fetchEnterpriseAssessments(slug: string) {
-  const response = await fetch(
-    `${API_BASE_URL}/api/web/assessment-enterprises/${encodeURIComponent(slug)}`,
-    { cache: "no-store" },
-  );
-  if (!response.ok) return undefined;
-  return response.json() as Promise<EnterpriseAssessmentPayload>;
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/web/assessment-enterprises/${encodeURIComponent(slug)}`,
+      { cache: "no-store" },
+    );
+    if (!response.ok) return undefined;
+    return response.json() as Promise<EnterpriseAssessmentPayload>;
+  } catch (error) {
+    console.error(
+      `[enterprise-assessments] fetch failed for slug=${slug} base=${API_BASE_URL}`,
+      error,
+    );
+    return undefined;
+  }
 }
 
 export async function fetchDefaultBranding(): Promise<SiteBranding> {

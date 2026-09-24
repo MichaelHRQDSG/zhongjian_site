@@ -1,6 +1,10 @@
 import DesignV1 from '@/components/home/DesignV1';
 import { fetchDefaultBranding } from '@/lib/enterprise-assessments';
+import { getCounselorsForHome } from '@/lib/counselors';
 import type { Metadata } from 'next';
+
+// 运行时读取 USE_REAL_COUNSELORS，避免改环境变量后仍吃构建期静态快照
+export const dynamic = 'force-dynamic';
 
 export async function generateMetadata(): Promise<Metadata> {
   const branding = await fetchDefaultBranding();
@@ -11,10 +15,15 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function HomePage() {
-  const branding = await fetchDefaultBranding();
+  const [branding, counselors] = await Promise.all([
+    fetchDefaultBranding(),
+    getCounselorsForHome(),
+  ]);
+
   return (
     <DesignV1
       branding={branding}
+      counselors={counselors.items}
       homeHref="/"
       onboardingHref="/onboarding"
       tweaks={{

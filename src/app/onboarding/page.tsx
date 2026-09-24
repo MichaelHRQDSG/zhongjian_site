@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 export default function OnboardingPage() {
   return (
     <main className="grid min-h-screen place-items-center bg-[#F5EFE6] px-6">
@@ -6,9 +8,9 @@ export default function OnboardingPage() {
         <p className="mt-4 leading-7 text-[#4A5A78]">
           此测评仅通过企业专属链接开放，请使用企业提供的链接或二维码进入。
         </p>
-        <a className="mt-7 inline-flex rounded-xl bg-[#1E4C9A] px-5 py-3 text-sm font-medium text-white" href="/">
+        <Link className="mt-7 inline-flex rounded-xl bg-[#1E4C9A] px-5 py-3 text-sm font-medium text-white" href="/">
           返回首页
-        </a>
+        </Link>
       </section>
     </main>
   );

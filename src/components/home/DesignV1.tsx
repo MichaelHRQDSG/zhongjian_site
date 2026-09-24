@@ -3,12 +3,13 @@
 
 import React from 'react';
 import {
-  EAP_MODULES, STATS, ARTICLES, AUDIOS, COUNSELORS, NAV_ITEMS,
+  EAP_MODULES, STATS, ARTICLES, AUDIOS, NAV_ITEMS,
   Icon, CitySkyline,
 } from '@/components/shared/data';
 import MobileNav from '@/components/layout/MobileNav';
 import type { ThemeTweaks } from '@/lib/tokens';
 import type { SiteBranding } from '@/lib/enterprise-assessments';
+import { MOCK_COUNSELORS, type CounselorCard } from '@/lib/counselors';
 
 // 方案一：稳重经典 —— 深蓝主导、央企气质
 // 特点：顶部深色导航、大幅数据展示、卡片式网格、庄重的排版
@@ -23,16 +24,19 @@ const DesignV1 = ({
   },
   homeHref = '/',
   onboardingHref = '/onboarding',
+  counselors,
 }: {
   tweaks?: ThemeTweaks;
   branding?: SiteBranding;
   homeHref?: string;
   onboardingHref?: string;
+  counselors?: CounselorCard[];
 }) => {
   const primary = tweaks?.primary || '#1E4C9A';
   const primaryDark = tweaks?.primaryDark || '#0F2E5F';
   const accent = tweaks?.accent || '#C8161D';
   const warm = tweaks?.warm || '#F5EFE6';
+  const counselorList = counselors?.length ? counselors : MOCK_COUNSELORS;
   const [heroSlide, setHeroSlide] = React.useState(0);
   const heroScenes = [
     { variant: 'site', img: '/assets/hero-site.jpg', title: '一线项目部', desc: '走进工地，倾听建设者的心声' },
@@ -408,26 +412,38 @@ const DesignV1 = ({
           <SectionTitle
             eyebrow="预约咨询"
             title="你可以选择你信任的咨询师"
-            desc="58 位持证咨询师，涵盖情绪疏导、职场压力、婚姻家庭、创伤修复等方向"
+            desc="提供持证咨询师，涵盖情绪疏导、职场压力、婚姻家庭、创伤修复等方向"
             primary={primary}
           />
 
-          {/* 咨询师团队 —— 4 张卡片横排 */}
+          {/* 咨询师团队 —— 卡片横排（模拟数据或 production 真实数据） */}
           <div className="gxa-counselors" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20, marginTop: 64 }}>
-            {COUNSELORS.map((c, i) => (
-              <div key={i} style={{
+            {counselorList.map((c, i) => (
+              <div key={`${c.name}-${i}`} style={{
                 background: '#fff', border: '1px solid #E8ECF3', padding: 28, borderRadius: 6,
                 textAlign: 'center', transition: 'all .3s',
               }} className="counselor-card">
-                <div style={{
-                  width: 88, height: 88, borderRadius: '50%',
-                  background: `linear-gradient(135deg, ${primary} 0%, ${primaryDark} 100%)`,
-                  color: '#fff',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 32, fontWeight: 600, fontFamily: '"Noto Serif SC", serif',
-                  letterSpacing: 1, margin: '0 auto 18px',
-                  boxShadow: `0 8px 20px -8px ${primary}80`,
-                }}>{c.name.charAt(0)}</div>
+                {c.avatarUrl ? (
+                  <img
+                    src={c.avatarUrl}
+                    alt={c.name}
+                    style={{
+                      width: 88, height: 88, borderRadius: '50%', objectFit: 'cover',
+                      margin: '0 auto 18px', display: 'block',
+                      boxShadow: `0 8px 20px -8px ${primary}80`,
+                    }}
+                  />
+                ) : (
+                  <div style={{
+                    width: 88, height: 88, borderRadius: '50%',
+                    background: `linear-gradient(135deg, ${primary} 0%, ${primaryDark} 100%)`,
+                    color: '#fff',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 32, fontWeight: 600, fontFamily: '"Noto Serif SC", serif',
+                    letterSpacing: 1, margin: '0 auto 18px',
+                    boxShadow: `0 8px 20px -8px ${primary}80`,
+                  }}>{c.name.charAt(0)}</div>
+                )}
                 <h4 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: '#0F2E5F', fontFamily: '"Noto Serif SC", serif' }}>{c.name}</h4>
                 <div style={{ fontSize: 12, color: '#4A5A78', marginTop: 4 }}>{c.title}</div>
                 <div style={{ display: 'flex', gap: 6, marginTop: 14, flexWrap: 'wrap', justifyContent: 'center' }}>
@@ -437,7 +453,7 @@ const DesignV1 = ({
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'center', gap: 20, marginTop: 14, fontSize: 12, color: '#8B96A8', paddingTop: 14, borderTop: '1px solid #F0EBE0' }}>
                   <span>执业 {c.years}</span>
-                  <span>{c.cases} 案例</span>
+                  <span>{c.cases} {c.casesUnit || '案例'}</span>
                 </div>
               </div>
             ))}
@@ -488,7 +504,7 @@ const DesignV1 = ({
       </section>
 
       {/* ==================== 页脚 ==================== */}
-      <Footer primary={primary} primaryDark={primaryDark} accent={accent}/>
+      <Footer branding={branding} primary={primary} primaryDark={primaryDark} accent={accent}/>
 
       <style>{`
         .module-card:hover {
@@ -526,7 +542,7 @@ const SectionTitle = ({ eyebrow, title, desc, primary, align = 'center' }) => (
 );
 
 // 页脚组件
-const Footer = ({ primary, primaryDark, accent }) => (
+const Footer = ({ branding, primary, primaryDark, accent }) => (
   <footer style={{ background: '#0A1E42', color: 'rgba(255,255,255,.7)', padding: '70px 0 30px' }}>
     <div style={{ maxWidth: 1360, margin: '0 auto', padding: '0 40px' }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr 1fr', gap: 60, paddingBottom: 50, borderBottom: '1px solid rgba(255,255,255,.1)' }}>
