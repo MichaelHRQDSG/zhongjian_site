@@ -1,5 +1,11 @@
-export interface EnterpriseAssessmentPayload {
+export interface SiteBranding {
   companyName: string;
+  siteName: string;
+  logoUrl: string;
+  slogan: string;
+}
+
+export interface EnterpriseAssessmentPayload extends SiteBranding {
   slug: string;
   assessments: Array<{
     id: string;
@@ -29,6 +35,25 @@ export async function fetchEnterpriseAssessments(slug: string) {
   );
   if (!response.ok) return undefined;
   return response.json() as Promise<EnterpriseAssessmentPayload>;
+}
+
+export async function fetchDefaultBranding(): Promise<SiteBranding> {
+  const fallback: SiteBranding = {
+    siteName: "广厦心安",
+    companyName: "中建三局集团有限公司",
+    logoUrl: "/assets/guangsha-xinan-logo.jpg",
+    slogan: "建广厦万间，护心安一寸",
+  };
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/web/assessment-enterprises/default`,
+      { cache: "no-store" },
+    );
+    if (!response.ok) return fallback;
+    return await response.json() as SiteBranding;
+  } catch {
+    return fallback;
+  }
 }
 
 export function toOnboardingScales(payload: EnterpriseAssessmentPayload) {

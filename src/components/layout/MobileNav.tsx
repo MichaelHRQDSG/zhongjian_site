@@ -5,7 +5,13 @@ import Link from 'next/link';
 import { Icon, NAV_ITEMS } from '@/components/shared/data';
 import { tokens } from '@/lib/tokens';
 
-export default function MobileNav() {
+export default function MobileNav({
+  siteName = '广厦心安',
+  onboardingHref = '/onboarding',
+}: {
+  siteName?: string;
+  onboardingHref?: string;
+}) {
   const [open, setOpen] = useState(false);
   const primary = tokens.primary;
   const accent = tokens.accent;
@@ -70,7 +76,7 @@ export default function MobileNav() {
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <div style={{ fontFamily: '"Noto Serif SC", serif', fontSize: 18, fontWeight: 700, color: primary, letterSpacing: 2 }}>
-                广厦心安
+                {siteName}
               </div>
               <button
                 type="button"
@@ -84,7 +90,7 @@ export default function MobileNav() {
             {NAV_ITEMS.map((item) => (
               <Link
                 key={item.label}
-                href={item.href}
+                href={item.href === '/onboarding' ? onboardingHref : item.href}
                 onClick={() => setOpen(false)}
                 style={{
                   display: 'flex',

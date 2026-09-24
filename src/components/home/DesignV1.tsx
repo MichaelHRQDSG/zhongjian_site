@@ -8,11 +8,27 @@ import {
 } from '@/components/shared/data';
 import MobileNav from '@/components/layout/MobileNav';
 import type { ThemeTweaks } from '@/lib/tokens';
+import type { SiteBranding } from '@/lib/enterprise-assessments';
 
 // 方案一：稳重经典 —— 深蓝主导、央企气质
 // 特点：顶部深色导航、大幅数据展示、卡片式网格、庄重的排版
 
-const DesignV1 = ({ tweaks }: { tweaks?: ThemeTweaks }) => {
+const DesignV1 = ({
+  tweaks,
+  branding = {
+    siteName: '广厦心安',
+    companyName: '中建三局集团有限公司',
+    logoUrl: '/assets/guangsha-xinan-logo.jpg',
+    slogan: '建广厦万间，护心安一寸',
+  },
+  homeHref = '/',
+  onboardingHref = '/onboarding',
+}: {
+  tweaks?: ThemeTweaks;
+  branding?: SiteBranding;
+  homeHref?: string;
+  onboardingHref?: string;
+}) => {
   const primary = tweaks?.primary || '#1E4C9A';
   const primaryDark = tweaks?.primaryDark || '#0F2E5F';
   const accent = tweaks?.accent || '#C8161D';
@@ -52,17 +68,17 @@ const DesignV1 = ({ tweaks }: { tweaks?: ThemeTweaks }) => {
       {/* ==================== 主导航 ==================== */}
       <header style={{ background: '#fff', borderBottom: '1px solid #E8ECF3', position: 'sticky', top: 0, zIndex: 50 }}>
         <div style={{ maxWidth: 1360, margin: '0 auto', padding: '18px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <a href="/" style={{ display: 'flex', alignItems: 'center', gap: 14, textDecoration: 'none', color: 'inherit' }}>
-            <img src="/assets/guangsha-xinan-logo.jpg" alt="广厦心安" style={{ height: 48, width: 48, borderRadius: 6, objectFit: 'cover' }}/>
+          <a href={homeHref} style={{ display: 'flex', alignItems: 'center', gap: 14, textDecoration: 'none', color: 'inherit' }}>
+            <img src={branding.logoUrl} alt={branding.siteName} style={{ height: 48, width: 48, borderRadius: 6, objectFit: 'cover' }}/>
             <div>
-              <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: 2, color: primary, fontFamily: '"Noto Serif SC", serif' }}>广厦心安</div>
-              <div style={{ fontSize: 11, color: '#4A5A78', letterSpacing: 1, marginTop: 2 }}>中建三局员工心理关爱平台</div>
+              <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: 2, color: primary, fontFamily: '"Noto Serif SC", serif' }}>{branding.siteName}</div>
+              <div style={{ fontSize: 11, color: '#4A5A78', letterSpacing: 1, marginTop: 2 }}>{branding.companyName}员工心理关爱平台</div>
             </div>
           </a>
 
           <nav className="gxa-nav-desktop" style={{ display: 'flex', alignItems: 'center', gap: 32 }}>
             {NAV_ITEMS.map(item => (
-              <a key={item.label} href={item.href} style={{
+              <a key={item.label} href={item.href === '/onboarding' ? onboardingHref : item.href} style={{
                 color: '#1A2846', textDecoration: 'none',
                 fontSize: 15, fontWeight: 500,
                 display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -88,7 +104,7 @@ const DesignV1 = ({ tweaks }: { tweaks?: ThemeTweaks }) => {
                 预约咨询
               </a>
             </div>
-            <MobileNav />
+            <MobileNav siteName={branding.siteName} onboardingHref={onboardingHref} />
           </div>
         </div>
       </header>
@@ -103,18 +119,16 @@ const DesignV1 = ({ tweaks }: { tweaks?: ThemeTweaks }) => {
           <div>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, background: '#fff', border: `1px solid ${primary}20`, padding: '8px 16px', borderRadius: 40, fontSize: 13, color: primary, marginBottom: 32 }}>
               <span style={{ width: 6, height: 6, borderRadius: '50%', background: accent }}/>
-              中建三局 · EAP 员工帮助计划
+              {branding.companyName} · EAP 员工帮助计划
             </div>
 
             <h1 className="gxa-hero-title" style={{ fontFamily: '"Noto Serif SC", serif', fontSize: 62, fontWeight: 700, lineHeight: 1.15, letterSpacing: 2, margin: 0, color: '#0F2E5F' }}>
-              建广厦万间
-              <br/>
-              <span style={{ color: primary }}>护心安一寸</span>
+              {branding.slogan}
             </h1>
 
             <p style={{ fontSize: 17, lineHeight: 1.9, color: '#4A5A78', marginTop: 32, maxWidth: 520 }}>
               关爱员工身心健康，共建幸福企业。<br/>
-              广厦心安为中建三局全体员工提供专业、保密、全天候的心理支持服务，
+              {branding.siteName}为{branding.companyName}全体员工提供专业、保密、全天候的心理支持服务，
               让每一位建设者在追求卓越的同时，也能拥有内在的从容与力量。
             </p>
 
@@ -128,7 +142,7 @@ const DesignV1 = ({ tweaks }: { tweaks?: ThemeTweaks }) => {
             </div>
 
             {/* 新员工入职测评横幅 —— NEW */}
-            <a href="/onboarding" style={{
+            <a href={onboardingHref} style={{
               display: 'flex', alignItems: 'center', gap: 20,
               marginTop: 40, padding: '20px 24px',
               background: '#fff',
@@ -260,7 +274,7 @@ const DesignV1 = ({ tweaks }: { tweaks?: ThemeTweaks }) => {
           <div className="gxa-services" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20, marginTop: 64 }}>
             {EAP_MODULES.map(m => {
               const isNew = m.badge === 'NEW';
-              const href = m.id === 'onboarding' ? '/onboarding' : `#${m.id}`;
+              const href = m.id === 'onboarding' ? onboardingHref : `#${m.id}`;
               return (
                 <a key={m.id} href={href} style={{
                   background: isNew
@@ -465,11 +479,11 @@ const DesignV1 = ({ tweaks }: { tweaks?: ThemeTweaks }) => {
             也是每一位建设者<span style={{ color: primary }}>心中的安稳</span>。
           </h2>
           <p style={{ fontSize: 15, color: '#4A5A78', lineHeight: 2, marginTop: 24, maxWidth: 640, margin: '24px auto 0' }}>
-            广厦心安相信，中建三局的每一位员工都是伟大工程的书写者。
+            {branding.siteName}相信，{branding.companyName}的每一位员工都是伟大工程的书写者。
             在追求「建证美好生活」的征途上，我们同样值得被温柔以待。
             这里没有病人和医生，只有建设者与陪伴者。
           </p>
-          <div style={{ marginTop: 40, fontSize: 14, color: primary, letterSpacing: 4 }}>—— 广厦心安 · EAP 服务团队 ——</div>
+          <div style={{ marginTop: 40, fontSize: 14, color: primary, letterSpacing: 4 }}>—— {branding.siteName} · EAP 服务团队 ——</div>
         </div>
       </section>
 
@@ -518,10 +532,10 @@ const Footer = ({ primary, primaryDark, accent }) => (
       <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr 1fr', gap: 60, paddingBottom: 50, borderBottom: '1px solid rgba(255,255,255,.1)' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
-            <img src="/assets/guangsha-xinan-logo.jpg" alt="" style={{ height: 44, width: 44, borderRadius: 4 }}/>
+            <img src={branding.logoUrl} alt="" style={{ height: 44, width: 44, borderRadius: 4 }}/>
             <div>
-              <div style={{ fontSize: 18, color: '#fff', fontWeight: 600, fontFamily: '"Noto Serif SC", serif', letterSpacing: 2 }}>广厦心安</div>
-              <div style={{ fontSize: 11, opacity: .6, marginTop: 3 }}>中建三局员工心理关爱平台</div>
+              <div style={{ fontSize: 18, color: '#fff', fontWeight: 600, fontFamily: '"Noto Serif SC", serif', letterSpacing: 2 }}>{branding.siteName}</div>
+              <div style={{ fontSize: 11, opacity: .6, marginTop: 3 }}>{branding.companyName}员工心理关爱平台</div>
             </div>
           </div>
           <p style={{ fontSize: 13, lineHeight: 2, opacity: .7 }}>
@@ -550,7 +564,7 @@ const Footer = ({ primary, primaryDark, accent }) => (
         ))}
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 30, fontSize: 12, opacity: .5 }}>
-        <div>© 2026 中建三局集团有限公司 · 广厦心安 EAP 项目组 · 版权所有</div>
+        <div>© 2026 {branding.companyName} · {branding.siteName} EAP 项目组 · 版权所有</div>
         <div>本平台由专业心理服务机构运营 · 严格遵守心理咨询行业伦理守则</div>
       </div>
     </div>

@@ -8,7 +8,23 @@ import type { ThemeTweaks } from '@/lib/tokens';
 // 新员工入职测评 · 完整流程页面
 // 6 个步骤：欢迎 → 说明 → 基础信息 → 量表答题 → 提交完成 → 报告预览
 
-const OnboardingAssessment = ({ tweaks, scales, companyName }: { tweaks?: ThemeTweaks; scales?: unknown[]; companyName?: string }) => {
+const OnboardingAssessment = ({
+  tweaks,
+  scales,
+  companyName = '中建三局集团有限公司',
+  siteName = '广厦心安',
+  logoUrl = '/assets/guangsha-xinan-logo.jpg',
+  slogan = '建广厦万间，护心安一寸',
+  homeHref = '/',
+}: {
+  tweaks?: ThemeTweaks;
+  scales?: unknown[];
+  companyName?: string;
+  siteName?: string;
+  logoUrl?: string;
+  slogan?: string;
+  homeHref?: string;
+}) => {
   const primary = tweaks?.primary || '#1E4C9A';
   const primaryDark = tweaks?.primaryDark || '#0F2E5F';
   const accent = tweaks?.accent || '#C8161D';
@@ -43,7 +59,7 @@ const OnboardingAssessment = ({ tweaks, scales, companyName }: { tweaks?: ThemeT
       fontFamily: '"Noto Sans SC", "PingFang SC", system-ui, sans-serif',
     }}>
       {/* 顶部导航 */}
-      <OnbHeader primary={primary} primaryDark={primaryDark} step={step} companyName={companyName}/>
+      <OnbHeader primary={primary} primaryDark={primaryDark} step={step} companyName={companyName} siteName={siteName} logoUrl={logoUrl} homeHref={homeHref}/>
 
       {/* 步骤条 */}
       {step !== 'welcome' && step !== 'complete' && step !== 'report' && (
@@ -52,28 +68,28 @@ const OnboardingAssessment = ({ tweaks, scales, companyName }: { tweaks?: ThemeT
 
       {/* 主内容区 */}
       <main className="gxa-onb-main" style={{ maxWidth: 1120, margin: '0 auto', padding: '40px 40px 120px' }}>
-        {step === 'welcome' && <StepWelcome assessmentCount={activeScales.length} primary={primary} primaryDark={primaryDark} accent={accent} onNext={() => goto('consent')}/>}
-        {step === 'consent' && <StepConsent primary={primary} primaryDark={primaryDark} accent={accent} onNext={() => goto('basic')} onBack={() => goto('welcome')}/>}
+        {step === 'welcome' && <StepWelcome assessmentCount={activeScales.length} primary={primary} primaryDark={primaryDark} accent={accent} companyName={companyName} slogan={slogan} onNext={() => goto('consent')}/>}
+        {step === 'consent' && <StepConsent primary={primary} primaryDark={primaryDark} accent={accent} companyName={companyName} onNext={() => goto('basic')} onBack={() => goto('welcome')}/>}
         {step === 'basic' && <StepBasic primary={primary} primaryDark={primaryDark} onNext={() => { setScaleIdx(0); goto('scale'); }} onBack={() => goto('consent')}/>}
         {step === 'scale' && <StepScale scales={activeScales} primary={primary} primaryDark={primaryDark} scaleIdx={scaleIdx} setScaleIdx={setScaleIdx} onComplete={() => goto('complete')} onBack={() => goto('basic')}/>}
         {step === 'complete' && <StepComplete primary={primary} primaryDark={primaryDark} accent={accent} onNext={() => goto('report')}/>}
-        {step === 'report' && <StepReport assessmentCount={activeScales.length} questionCount={activeQuestionCount} primary={primary} primaryDark={primaryDark} accent={accent} warm={warm}/>}
+        {step === 'report' && <StepReport assessmentCount={activeScales.length} questionCount={activeQuestionCount} primary={primary} primaryDark={primaryDark} accent={accent} warm={warm} companyName={companyName} siteName={siteName} homeHref={homeHref}/>}
       </main>
 
       {/* 底部 */}
-      <OnbFooter primary={primary} accent={accent}/>
+      <OnbFooter primary={primary} accent={accent} companyName={companyName} siteName={siteName}/>
     </div>
   );
 };
 
 // ==================== 顶部导航 ====================
-const OnbHeader = ({ primary, primaryDark, step, companyName }) => (
+const OnbHeader = ({ primary, primaryDark, step, companyName, siteName, logoUrl, homeHref }) => (
   <header style={{ background: '#fff', borderBottom: '1px solid #E8ECF3', position: 'sticky', top: 0, zIndex: 50 }}>
     <div style={{ maxWidth: 1360, margin: '0 auto', padding: '16px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-      <a href="/" style={{ display: 'flex', alignItems: 'center', gap: 14, textDecoration: 'none', color: 'inherit' }}>
-        <img src="/assets/guangsha-xinan-logo.jpg" alt="" style={{ height: 44, width: 44, borderRadius: 6 }}/>
+      <a href={homeHref} style={{ display: 'flex', alignItems: 'center', gap: 14, textDecoration: 'none', color: 'inherit' }}>
+        <img src={logoUrl} alt="" style={{ height: 44, width: 44, borderRadius: 6 }}/>
         <div>
-          <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: 2, color: primary, fontFamily: '"Noto Serif SC", serif' }}>广厦心安</div>
+          <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: 2, color: primary, fontFamily: '"Noto Serif SC", serif' }}>{siteName}</div>
           <div style={{ fontSize: 11, color: '#4A5A78', letterSpacing: 1, marginTop: 2 }}>{companyName ? `${companyName} · 专属测评` : '新员工入职测评'}</div>
         </div>
       </a>
@@ -82,7 +98,7 @@ const OnbHeader = ({ primary, primaryDark, step, companyName }) => (
           <Icon name="lock" size={14} color={primary}/>
           结果严格保密，不影响录用与晋升
         </div>
-        <a href="/" style={{ fontSize: 13, color: '#4A5A78', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <a href={homeHref} style={{ fontSize: 13, color: '#4A5A78', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
           退出 · 进度自动保存
         </a>
       </div>
@@ -125,10 +141,10 @@ const OnbStepper = ({ primary, step, scaleIdx }) => {
 };
 
 // ==================== 底部 ====================
-const OnbFooter = ({ primary, accent }) => (
+const OnbFooter = ({ primary, accent, companyName, siteName }) => (
   <footer style={{ background: '#0A1E42', color: 'rgba(255,255,255,.7)', padding: '30px 0', fontSize: 12 }}>
     <div style={{ maxWidth: 1360, margin: '0 auto', padding: '0 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-      <div>© 2026 中建三局集团有限公司 · 广厦心安 EAP 项目组</div>
+      <div>© 2026 {companyName} · {siteName} EAP 项目组</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <Icon name="phone" size={12}/>
@@ -140,7 +156,7 @@ const OnbFooter = ({ primary, accent }) => (
 );
 
 // ==================== Step 1: 欢迎页 ====================
-const StepWelcome = ({ assessmentCount, primary, primaryDark, accent, onNext }) => (
+const StepWelcome = ({ assessmentCount, primary, primaryDark, accent, companyName, slogan, onNext }) => (
   <div className="gxa-onb-welcome" style={{ display: 'grid', gridTemplateColumns: '1.15fr 1fr', gap: 80, alignItems: 'center', minHeight: 620 }}>
     <div>
       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, background: '#fff', border: `1px solid ${primary}20`, padding: '8px 16px', borderRadius: 40, fontSize: 13, color: primary, marginBottom: 32 }}>
@@ -149,14 +165,14 @@ const StepWelcome = ({ assessmentCount, primary, primaryDark, accent, onNext }) 
           background: accent, color: '#fff',
           padding: '2px 8px', borderRadius: 3,
         }}>NEW</span>
-        中建三局员工心理关爱 · 入职专项
+        {companyName}员工心理关爱 · 入职专项
       </div>
 
       <h1 className="gxa-onb-title" style={{ fontFamily: '"Noto Serif SC", serif', fontSize: 56, fontWeight: 700, lineHeight: 1.2, letterSpacing: 2, margin: 0, color: '#0F2E5F' }}>
-        欢迎加入中建三局
+        欢迎加入{companyName}
       </h1>
       <h2 style={{ fontFamily: '"Noto Serif SC", serif', fontSize: 30, fontWeight: 500, lineHeight: 1.4, letterSpacing: 1, margin: '20px 0 0', color: primary }}>
-        30 分钟，为你建立心理基线档案
+        {slogan}
       </h2>
 
       <p style={{ fontSize: 16, lineHeight: 1.95, color: '#4A5A78', marginTop: 32, maxWidth: 540 }}>
@@ -254,7 +270,7 @@ const StepWelcome = ({ assessmentCount, primary, primaryDark, accent, onNext }) 
 );
 
 // ==================== Step 2: 知情同意 ====================
-const StepConsent = ({ primary, primaryDark, accent, onNext, onBack }) => {
+const StepConsent = ({ primary, primaryDark, accent, companyName, onNext, onBack }) => {
   const [checked, setChecked] = React.useState(false);
   return (
     <div style={{ maxWidth: 820, margin: '0 auto' }}>
@@ -290,7 +306,7 @@ const StepConsent = ({ primary, primaryDark, accent, onNext, onBack }) => {
         <div style={{ border: '1px solid #E8ECF3', borderRadius: 6, padding: '24px 28px', maxHeight: 260, overflowY: 'auto', fontSize: 13, color: '#4A5A78', lineHeight: 1.9 }}>
           <div style={{ fontSize: 14, fontWeight: 600, color: '#0F2E5F', marginBottom: 12 }}>《心理测评知情同意书》</div>
           <p style={{ margin: '0 0 12px' }}><strong>一、测评目的</strong><br/>本次测评旨在帮助您了解自身心理健康状态，建立个人心理基线档案，并为您提供个性化的心理支持建议。</p>
-          <p style={{ margin: '0 0 12px' }}><strong>二、保密条款</strong><br/>1. 您的测评结果仅您本人可见；<br/>2. 数据由第三方 EAP 机构（连心心理）独立存储，中建三局人事、行政、您的直接上级均无权访问原始数据；<br/>3. 仅在您签署额外授权后，才可向指定咨询师分享测评结果；<br/>4. 聚合数据（部门/项目部级别）会用于内部心理健康趋势分析，但已完全脱敏。</p>
+          <p style={{ margin: '0 0 12px' }}><strong>二、保密条款</strong><br/>1. 您的测评结果仅您本人可见；<br/>2. 数据由第三方 EAP 机构（连心心理）独立存储，{companyName}人事、行政、您的直接上级均无权访问原始数据；<br/>3. 仅在您签署额外授权后，才可向指定咨询师分享测评结果；<br/>4. 聚合数据（部门/项目部级别）会用于内部心理健康趋势分析，但已完全脱敏。</p>
           <p style={{ margin: '0 0 12px' }}><strong>三、异常情况处理</strong><br/>若测评结果显示您可能存在严重的心理困扰或自伤自杀风险，EAP 咨询师将主动通过系统内消息联系您，此过程<strong>不会通知任何管理者</strong>。</p>
           <p style={{ margin: '0 0 12px' }}><strong>四、您的权利</strong><br/>1. 随时中止测评；<br/>2. 随时申请删除您的全部数据；<br/>3. 申请导出个人测评报告；<br/>4. 对结果解读申请免费复议咨询。</p>
           <p style={{ margin: '0 0 12px' }}><strong>五、数据保存期限</strong><br/>您的原始测评数据保存 3 年，之后自动匿名化归档。</p>
@@ -694,7 +710,7 @@ const StepComplete = ({ primary, primaryDark, accent, onNext }) => {
 };
 
 // ==================== Step 6: 报告预览 ====================
-const StepReport = ({ assessmentCount, questionCount, primary, primaryDark, accent, warm }) => {
+const StepReport = ({ assessmentCount, questionCount, primary, primaryDark, accent, warm, companyName, siteName, homeHref }) => {
   const dimensions = [
     { name: '心理健康', score: 82, level: '良好', color: '#22A879', angle: -90, note: '整体情绪平稳，抗压能力较强' },
     { name: '性格倾向', score: 76, level: 'ENFJ', color: primary, angle: -30, note: '主人公型 · 富有共情力的团队协作者' },
@@ -728,7 +744,7 @@ const StepReport = ({ assessmentCount, questionCount, primary, primaryDark, acce
           <div>
             <div style={{ fontSize: 12, opacity: .8, letterSpacing: 3, marginBottom: 12 }}>YOUR PSYCHOLOGICAL BASELINE · 你的心理基线档案</div>
             <h1 style={{ fontFamily: '"Noto Serif SC", serif', fontSize: 36, fontWeight: 700, margin: 0, letterSpacing: 1, lineHeight: 1.3 }}>
-              嗨，欢迎加入中建三局
+              嗨，欢迎加入{companyName}
               <br/>
               <span style={{ opacity: .85, fontSize: 22, fontWeight: 500 }}>这是我们初次认识 · 报告编号 GXA-2026-091108</span>
             </h1>
@@ -876,8 +892,8 @@ const StepReport = ({ assessmentCount, questionCount, primary, primaryDark, acce
         <button style={{ background: '#fff', color: '#0F2E5F', border: '1px solid #E0E4EC', padding: '12px 22px', borderRadius: 4, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
           <Icon name="chat" size={14}/> 就报告结果咨询
         </button>
-        <a href="/" style={{ background: '#fff', color: '#0F2E5F', border: '1px solid #E0E4EC', padding: '12px 22px', borderRadius: 4, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
-          返回广厦心安首页 <Icon name="arrow" size={14}/>
+        <a href={homeHref} style={{ background: '#fff', color: '#0F2E5F', border: '1px solid #E0E4EC', padding: '12px 22px', borderRadius: 4, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
+          返回{siteName}首页 <Icon name="arrow" size={14}/>
         </a>
       </div>
 
@@ -885,7 +901,7 @@ const StepReport = ({ assessmentCount, questionCount, primary, primaryDark, acce
       <div style={{ marginTop: 32, padding: '20px 24px', background: '#FBFAF7', borderRadius: 6, borderLeft: `3px solid ${primary}`, fontSize: 13, color: '#4A5A78', lineHeight: 1.8 }}>
         <strong style={{ color: '#0F2E5F' }}>关于本报告 · </strong>
         本报告为你的私人心理档案，仅你本人可见。EAP 咨询师团队仅在你主动预约时才能查阅相关内容。
-        中建三局人事、行政、你的直接上级<strong>均无权访问</strong>本报告的任何原始数据。
+        {companyName}人事、行政、你的直接上级<strong>均无权访问</strong>本报告的任何原始数据。
         你可以随时申请导出或删除全部数据。如有疑问，请拨打 400-880-6666。
       </div>
     </div>
