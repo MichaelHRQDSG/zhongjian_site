@@ -8,8 +8,9 @@ export const dynamic = 'force-dynamic';
 
 export async function generateMetadata(): Promise<Metadata> {
   const branding = await fetchDefaultBranding();
+  const company = (branding.companyName || '').trim();
   return {
-    title: `${branding.siteName} · ${branding.companyName}`,
+    title: company ? `${branding.siteName} · ${company}` : branding.siteName,
     description: branding.slogan,
   };
 }

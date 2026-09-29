@@ -17,10 +17,10 @@ const notoSerif = Noto_Serif_SC({
 });
 
 export const metadata: Metadata = {
-  title: '广厦心安 · 中建三局员工心理关爱平台',
+  title: '心安 EAP · 员工心理关爱平台',
   description:
-    '关爱员工身心健康，共建幸福企业。广厦心安为中建三局全体员工提供专业、保密、全天候的心理支持服务。',
-  applicationName: '广厦心安',
+    '专业心理测评量表与一对一咨询服务，全程保密。关爱员工身心健康，提供 EAP 心理支持。',
+  applicationName: '心安 EAP',
 };
 
 export const viewport: Viewport = {

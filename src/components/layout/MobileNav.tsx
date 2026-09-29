@@ -6,7 +6,7 @@ import { Icon, NAV_ITEMS } from '@/components/shared/data';
 import { tokens } from '@/lib/tokens';
 
 export default function MobileNav({
-  siteName = '广厦心安',
+  siteName = '心安 EAP',
   onboardingHref = '/onboarding',
 }: {
   siteName?: string;

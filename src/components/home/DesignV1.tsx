@@ -10,17 +10,18 @@ import MobileNav from '@/components/layout/MobileNav';
 import type { ThemeTweaks } from '@/lib/tokens';
 import type { SiteBranding } from '@/lib/enterprise-assessments';
 import { MOCK_COUNSELORS, type CounselorCard } from '@/lib/counselors';
+import { getCounselorSlug } from '@/lib/counselor-profiles';
 
-// 方案一：稳重经典 —— 深蓝主导、央企气质
+// 方案一：稳重经典 —— 深蓝主导
 // 特点：顶部深色导航、大幅数据展示、卡片式网格、庄重的排版
 
 const DesignV1 = ({
   tweaks,
   branding = {
-    siteName: '广厦心安',
-    companyName: '中建三局集团有限公司',
+    siteName: '心安 EAP',
+    companyName: '',
     logoUrl: '/assets/guangsha-xinan-logo.jpg',
-    slogan: '建广厦万间，护心安一寸',
+    slogan: '专业测评，贴心陪伴',
   },
   homeHref = '/',
   onboardingHref = '/onboarding',
@@ -37,11 +38,12 @@ const DesignV1 = ({
   const accent = tweaks?.accent || '#C8161D';
   const warm = tweaks?.warm || '#F5EFE6';
   const counselorList = counselors?.length ? counselors : MOCK_COUNSELORS;
+  const companyName = (branding.companyName || '').trim();
   const [heroSlide, setHeroSlide] = React.useState(0);
   const heroScenes = [
-    { variant: 'site', img: '/assets/hero-site.jpg', title: '一线项目部', desc: '走进工地，倾听建设者的心声' },
-    { variant: 'office', img: '/assets/hero-office.jpg', title: '机关办公室', desc: '关注职场人的日常心理健康' },
-    { variant: 'family', img: '/assets/hero-family.jpg', title: '幸福小家', desc: '陪伴建设者的家人共同成长' },
+    { variant: 'site', img: '/assets/hero-site.jpg', title: '心理测评', desc: '专业量表，帮助你更好认识自己' },
+    { variant: 'office', img: '/assets/hero-office.jpg', title: '职场支持', desc: '关注工作压力与情绪健康' },
+    { variant: 'family', img: '/assets/hero-family.jpg', title: '生活与家庭', desc: '陪伴你与家人共同成长' },
   ];
 
   React.useEffect(() => {
@@ -59,13 +61,10 @@ const DesignV1 = ({
             <Icon name="shield" size={14} />
             <span>本平台严格执行保密协议 · 一切咨询记录不进入人事档案</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 24, fontSize: 13 }}>
-            <a href="#" style={{ color: '#fff', opacity: .85, textDecoration: 'none' }}>员工登录</a>
-            <a href="tel:4008806666" style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#FFC4A0', textDecoration: 'none' }}>
-              <Icon name="phone" size={14} />
-              <strong>24h 心理热线 400-880-6666</strong>
-            </a>
-          </div>
+          <a href="tel:4008806666" style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#FFC4A0', textDecoration: 'none', fontSize: 13 }}>
+            <Icon name="phone" size={14} />
+            <strong>24h 心理热线 400-880-6666</strong>
+          </a>
         </div>
       </div>
 
@@ -76,7 +75,9 @@ const DesignV1 = ({
             <img src={branding.logoUrl} alt={branding.siteName} style={{ height: 48, width: 48, borderRadius: 6, objectFit: 'cover' }}/>
             <div>
               <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: 2, color: primary, fontFamily: '"Noto Serif SC", serif' }}>{branding.siteName}</div>
-              <div style={{ fontSize: 11, color: '#4A5A78', letterSpacing: 1, marginTop: 2 }}>{branding.companyName}员工心理关爱平台</div>
+              {companyName ? (
+                <div style={{ fontSize: 11, color: '#4A5A78', letterSpacing: 1, marginTop: 2 }}>{companyName}</div>
+              ) : null}
             </div>
           </a>
 
@@ -101,9 +102,9 @@ const DesignV1 = ({
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div className="gxa-nav-cta" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <button style={{ background: 'transparent', border: '1px solid #D0D6E0', color: '#1A2846', padding: '10px 18px', borderRadius: 4, fontSize: 14, cursor: 'pointer' }}>
+              <a href={onboardingHref} style={{ background: 'transparent', border: '1px solid #D0D6E0', color: '#1A2846', padding: '10px 18px', borderRadius: 4, fontSize: 14, cursor: 'pointer', textDecoration: 'none' }}>
                 心理测评
-              </button>
+              </a>
               <a href="#consultation" style={{ background: primary, border: 'none', color: '#fff', padding: '10px 22px', borderRadius: 4, fontSize: 14, cursor: 'pointer', fontWeight: 500, textDecoration: 'none' }}>
                 预约咨询
               </a>
@@ -123,7 +124,7 @@ const DesignV1 = ({
           <div>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, background: '#fff', border: `1px solid ${primary}20`, padding: '8px 16px', borderRadius: 40, fontSize: 13, color: primary, marginBottom: 32 }}>
               <span style={{ width: 6, height: 6, borderRadius: '50%', background: accent }}/>
-              {branding.companyName} · EAP 员工帮助计划
+              {companyName ? `${companyName} · EAP 员工帮助计划` : 'EAP 员工帮助计划 · 心理测评与咨询'}
             </div>
 
             <h1 className="gxa-hero-title" style={{ fontFamily: '"Noto Serif SC", serif', fontSize: 62, fontWeight: 700, lineHeight: 1.15, letterSpacing: 2, margin: 0, color: '#0F2E5F' }}>
@@ -131,22 +132,22 @@ const DesignV1 = ({
             </h1>
 
             <p style={{ fontSize: 17, lineHeight: 1.9, color: '#4A5A78', marginTop: 32, maxWidth: 520 }}>
-              关爱员工身心健康，共建幸福企业。<br/>
-              {branding.siteName}为{branding.companyName}全体员工提供专业、保密、全天候的心理支持服务，
-              让每一位建设者在追求卓越的同时，也能拥有内在的从容与力量。
+              专业心理测评量表与一对一咨询服务，全程保密。<br/>
+              无论你正经历职场压力、情绪困扰，还是希望更好地认识自己，
+              我们都在这里，以专业与尊重陪伴你走过每一程。
             </p>
 
             <div style={{ display: 'flex', gap: 16, marginTop: 44 }}>
-              <button style={{ background: primary, color: '#fff', border: 'none', padding: '16px 32px', fontSize: 15, borderRadius: 4, cursor: 'pointer', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <a href="#consultation" style={{ background: primary, color: '#fff', border: 'none', padding: '16px 32px', fontSize: 15, borderRadius: 4, cursor: 'pointer', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
                 预约心理咨询 <Icon name="arrow" size={16} />
-              </button>
-              <button style={{ background: '#fff', color: primary, border: `1.5px solid ${primary}`, padding: '16px 32px', fontSize: 15, borderRadius: 4, cursor: 'pointer', fontWeight: 500 }}>
-                了解 EAP 服务
-              </button>
+              </a>
+              <a href={onboardingHref} style={{ background: '#fff', color: primary, border: `1.5px solid ${primary}`, padding: '16px 32px', fontSize: 15, borderRadius: 4, cursor: 'pointer', fontWeight: 500, textDecoration: 'none' }}>
+                新员工入职测评
+              </a>
             </div>
 
-            {/* 新员工入职测评横幅 —— NEW */}
-            <a href={onboardingHref} style={{
+            {/* 了解 EAP 服务横幅 → 二级介绍页 */}
+            <a href="/eap-services" style={{
               display: 'flex', alignItems: 'center', gap: 20,
               marginTop: 40, padding: '20px 24px',
               background: '#fff',
@@ -170,26 +171,21 @@ const DesignV1 = ({
                 color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
                 flexShrink: 0, position: 'relative',
               }}>
-                <Icon name="userCheck" size={22}/>
+                <Icon name="book" size={22}/>
               </div>
               <div style={{ flex: 1, position: 'relative' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                  <span style={{
-                    fontSize: 10, fontWeight: 700, letterSpacing: 1,
-                    background: accent, color: '#fff',
-                    padding: '2px 8px', borderRadius: 3,
-                  }}>NEW</span>
-                  <span style={{ fontSize: 12, color: primary, letterSpacing: 1, fontWeight: 500 }}>入职测评 · 新功能上线</span>
+                  <span style={{ fontSize: 12, color: primary, letterSpacing: 1, fontWeight: 500 }}>核心服务</span>
                 </div>
                 <div style={{ fontSize: 17, fontWeight: 600, color: '#0F2E5F', fontFamily: '"Noto Serif SC", serif', letterSpacing: 1 }}>
-                  新入职？30 分钟建立你的心理基线档案
+                  了解 EAP 服务
                 </div>
                 <div style={{ fontSize: 13, color: '#4A5A78', marginTop: 4 }}>
-                  5 个专业量表 · 结果严格保密 · 可获得个性化成长建议
+                  入职测评 · 心理知识库 · 预约咨询 —— 三个入口陪你走过每一段路
                 </div>
               </div>
               <div style={{ color: primary, display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 500, position: 'relative', flexShrink: 0 }}>
-                开始测评 <Icon name="arrow" size={16}/>
+                查看服务 <Icon name="arrow" size={16}/>
               </div>
             </a>
 
@@ -369,11 +365,11 @@ const DesignV1 = ({
                   <span style={{ display: 'inline-block', width: 4, height: 18, background: primary, verticalAlign: 'middle', marginRight: 12, transform: 'translateY(-1px)' }}/>
                   心理图文
                 </h3>
-                <a href="#" style={{ fontSize: 12, color: primary, textDecoration: 'none' }}>更多 →</a>
+                <a href="/articles" style={{ fontSize: 12, color: primary, textDecoration: 'none' }}>更多 →</a>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {ARTICLES.map((a, i) => (
-                  <a key={i} href="#" style={{ display: 'flex', gap: 16, textDecoration: 'none', color: 'inherit', padding: '14px 8px', borderRadius: 4, transition: 'background .2s', borderBottom: i < ARTICLES.length - 1 ? '1px solid #F0EBE0' : 'none' }} className="article-row">
+                  <a key={a.slug || i} href={`/articles/${a.slug}`} style={{ display: 'flex', gap: 16, textDecoration: 'none', color: 'inherit', padding: '14px 8px', borderRadius: 4, transition: 'background .2s', borderBottom: i < ARTICLES.length - 1 ? '1px solid #F0EBE0' : 'none' }} className="article-row">
                     <div style={{ width: 100, height: 70, flexShrink: 0, borderRadius: 4, overflow: 'hidden' }}>
                       <img src={a.img} alt={a.title} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}/>
                     </div>
@@ -398,7 +394,7 @@ const DesignV1 = ({
                   <span style={{ display: 'inline-block', width: 4, height: 18, background: '#fff', verticalAlign: 'middle', marginRight: 12, transform: 'translateY(-1px)', opacity: .5 }}/>
                   心理音画
                 </h3>
-                <a href="#" style={{ fontSize: 12, color: '#fff', textDecoration: 'none', opacity: .8 }}>更多 →</a>
+                <a href="/audios" style={{ fontSize: 12, color: '#fff', textDecoration: 'none', opacity: .8 }}>更多 →</a>
               </div>
               <AudioPlayerList audios={AUDIOS} primary={primary}/>
             </div>
@@ -416,12 +412,18 @@ const DesignV1 = ({
             primary={primary}
           />
 
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 20 }}>
+            <a href="/counselors" style={{ fontSize: 14, color: primary, textDecoration: 'none', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              了解更多 <Icon name="arrow" size={14} />
+            </a>
+          </div>
+
           {/* 咨询师团队 —— 卡片横排（模拟数据或 production 真实数据） */}
-          <div className="gxa-counselors" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20, marginTop: 64 }}>
+          <div className="gxa-counselors" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20, marginTop: 24 }}>
             {counselorList.map((c, i) => (
-              <div key={`${c.name}-${i}`} style={{
+              <a key={`${c.name}-${i}`} href={`/counselors/${getCounselorSlug(c.name)}`} style={{
                 background: '#fff', border: '1px solid #E8ECF3', padding: 28, borderRadius: 6,
-                textAlign: 'center', transition: 'all .3s',
+                textAlign: 'center', transition: 'all .3s', textDecoration: 'none', color: 'inherit', display: 'block',
               }} className="counselor-card">
                 {c.avatarUrl ? (
                   <img
@@ -455,7 +457,7 @@ const DesignV1 = ({
                   <span>执业 {c.years}</span>
                   <span>{c.cases} {c.casesUnit || '案例'}</span>
                 </div>
-              </div>
+              </a>
             ))}
           </div>
 
@@ -466,22 +468,22 @@ const DesignV1 = ({
               <div style={{ display: 'flex', gap: 32, marginTop: 8 }}>
                 {[
                   { n: 1, title: '选择方向', desc: '按困扰或咨询师筛选' },
-                  { n: 2, title: '选择时段', desc: '视频 / 电话 / 线下面谈' },
+                  { n: 2, title: '联系咨询助理', desc: '了解咨询过程 / 填写预约表单 / 助理推送预约订单' },
                   { n: 3, title: '完成预约', desc: '首次入职咨询免费' },
                 ].map(s => (
                   <div key={s.n} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#fff', color: primary, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600, fontFamily: '"Noto Serif SC", serif', flexShrink: 0, border: `1.5px solid ${primary}30` }}>{s.n}</div>
                     <div>
                       <div style={{ fontSize: 14, fontWeight: 600, color: '#0F2E5F' }}>{s.title}</div>
-                      <div style={{ fontSize: 12, color: '#4A5A78' }}>{s.desc}</div>
+                      <div style={{ fontSize: 12, color: '#4A5A78', maxWidth: 180, lineHeight: 1.5 }}>{s.desc}</div>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
-            <button style={{ background: primary, color: '#fff', border: 'none', padding: '16px 32px', borderRadius: 4, fontSize: 15, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, boxShadow: `0 10px 24px -10px ${primary}66` }}>
-              立即预约 <Icon name="arrow" size={16}/>
-            </button>
+            <a href="/contact" style={{ background: primary, color: '#fff', border: 'none', padding: '16px 32px', borderRadius: 4, fontSize: 15, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, boxShadow: `0 10px 24px -10px ${primary}66`, textDecoration: 'none' }}>
+              联系助理 <Icon name="arrow" size={16}/>
+            </a>
           </div>
         </div>
       </section>
@@ -489,17 +491,16 @@ const DesignV1 = ({
       {/* ==================== 我们的理念 ==================== */}
       <section style={{ padding: '120px 0', background: '#fff', textAlign: 'center' }}>
         <div style={{ maxWidth: 900, margin: '0 auto', padding: '0 40px' }}>
-          <div style={{ fontSize: 40, color: primary, opacity: .3, fontFamily: '"Noto Serif SC", serif' }}>❝</div>
-          <h2 style={{ fontFamily: '"Noto Serif SC", serif', fontSize: 34, fontWeight: 500, lineHeight: 1.7, color: '#0F2E5F', letterSpacing: 2, margin: '16px 0' }}>
-            我们建的不只是楼宇，<br/>
-            也是每一位建设者<span style={{ color: primary }}>心中的安稳</span>。
+          <h2 style={{ fontFamily: '"Noto Serif SC", serif', fontSize: 34, fontWeight: 500, lineHeight: 1.7, color: '#0F2E5F', letterSpacing: 2, margin: 0 }}>
+            倾听内心，守护成长。<br/>
+            专业测评与心理咨询，陪你走过<span style={{ color: primary }}>情绪的每一程</span>。
           </h2>
           <p style={{ fontSize: 15, color: '#4A5A78', lineHeight: 2, marginTop: 24, maxWidth: 640, margin: '24px auto 0' }}>
-            {branding.siteName}相信，{branding.companyName}的每一位员工都是伟大工程的书写者。
-            在追求「建证美好生活」的征途上，我们同样值得被温柔以待。
-            这里没有病人和医生，只有建设者与陪伴者。
+            我们相信，每一位员工都值得被温柔以待。
+            这里提供专业的心理测评量表与咨询服务，帮助你认识自己、疏导压力、重建力量。
+            这里没有病人和医生，只有求助者与陪伴者。
           </p>
-          <div style={{ marginTop: 40, fontSize: 14, color: primary, letterSpacing: 4 }}>—— {branding.siteName} · EAP 服务团队 ——</div>
+          <div style={{ marginTop: 40, fontSize: 14, color: primary, letterSpacing: 4 }}>—— EAP 服务团队 ——</div>
         </div>
       </section>
 
@@ -542,7 +543,9 @@ const SectionTitle = ({ eyebrow, title, desc, primary, align = 'center' }) => (
 );
 
 // 页脚组件
-const Footer = ({ branding, primary, primaryDark, accent }) => (
+const Footer = ({ branding, primary, primaryDark, accent }) => {
+  const companyName = (branding.companyName || '').trim();
+  return (
   <footer style={{ background: '#0A1E42', color: 'rgba(255,255,255,.7)', padding: '70px 0 30px' }}>
     <div style={{ maxWidth: 1360, margin: '0 auto', padding: '0 40px' }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr 1fr', gap: 60, paddingBottom: 50, borderBottom: '1px solid rgba(255,255,255,.1)' }}>
@@ -551,12 +554,14 @@ const Footer = ({ branding, primary, primaryDark, accent }) => (
             <img src={branding.logoUrl} alt="" style={{ height: 44, width: 44, borderRadius: 4 }}/>
             <div>
               <div style={{ fontSize: 18, color: '#fff', fontWeight: 600, fontFamily: '"Noto Serif SC", serif', letterSpacing: 2 }}>{branding.siteName}</div>
-              <div style={{ fontSize: 11, opacity: .6, marginTop: 3 }}>{branding.companyName}员工心理关爱平台</div>
+              {companyName ? (
+                <div style={{ fontSize: 11, opacity: .6, marginTop: 3 }}>{companyName}</div>
+              ) : null}
             </div>
           </div>
           <p style={{ fontSize: 13, lineHeight: 2, opacity: .7 }}>
-            关爱员工身心健康 · 共建幸福企业<br/>
-            为每一位建设者提供专业、保密、全天候的心理支持
+            专业心理测评 · 一对一咨询陪伴<br/>
+            为每一位员工提供专业、保密、全天候的心理支持
           </p>
           <div style={{ marginTop: 24, padding: 20, background: 'rgba(200,22,29,.15)', borderLeft: `3px solid ${accent}`, borderRadius: 3 }}>
             <div style={{ fontSize: 12, color: '#fff', opacity: .85, marginBottom: 4 }}>24 小时心理热线</div>
@@ -580,12 +585,13 @@ const Footer = ({ branding, primary, primaryDark, accent }) => (
         ))}
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 30, fontSize: 12, opacity: .5 }}>
-        <div>© 2026 {branding.companyName} · {branding.siteName} EAP 项目组 · 版权所有</div>
+        <div>© 2026 {companyName ? `${companyName} · ` : ''}{branding.siteName} · 版权所有</div>
         <div>本平台由专业心理服务机构运营 · 严格遵守心理咨询行业伦理守则</div>
       </div>
     </div>
   </footer>
-);
+  );
+};
 
 // ==================== 音频播放器组件 ====================
 const AudioPlayerList = ({ audios, primary }) => {

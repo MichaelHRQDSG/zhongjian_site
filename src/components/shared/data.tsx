@@ -3,7 +3,10 @@
 
 import React from 'react';
 
-// 共享数据 —— 中建三局 EAP "广厦心安" 网站
+import { getHomeArticles } from '@/lib/articles';
+import { getHomeAudios } from '@/lib/audios';
+
+// 共享数据 —— EAP 心理测评与咨询网站
 // 所有方案共用此数据源
 
 const EAP_MODULES = [
@@ -13,7 +16,7 @@ const EAP_MODULES = [
 ];
 
 const STATS = [
-  { num: '58', label: '项目部全量覆盖' },
+  { num: '50+', label: '合作企业覆盖' },
   { num: '12,800+', label: '累计服务员工' },
   { num: '1000+', label: '专业心理咨询师' },
   { num: '24/7', label: '全天候热线支持' },
@@ -21,9 +24,9 @@ const STATS = [
 
 const QA_LIST = [
   {
-    tags: ['项目一线', '压力', '失眠'],
-    title: '常年驻守项目工地，长期失眠焦虑怎么办？',
-    answer: '一线工作强度大、离家远，身体与情绪都在超负荷。先从建立稳定的「睡前锚点」开始——固定 20 分钟远离手机、做 3 分钟深呼吸……',
+    tags: ['职场压力', '失眠', '焦虑'],
+    title: '工作压力大，长期失眠焦虑怎么办？',
+    answer: '高强度工作与情绪超负荷很常见。先从建立稳定的「睡前锚点」开始——固定 20 分钟远离手机、做 3 分钟深呼吸……',
     author: '林晚晴',
     role: '国家二级心理咨询师',
     helpful: 428,
@@ -31,14 +34,14 @@ const QA_LIST = [
   {
     tags: ['职场关系', '沟通', '中层管理'],
     title: '带团队时怎么平衡业绩压力与员工心理？',
-    answer: '优秀的项目经理往往同时是「情绪容器」。给自己留出情绪缓冲区，是保护团队的第一步……',
+    answer: '优秀的管理者往往同时是「情绪容器」。给自己留出情绪缓冲区，是保护团队的第一步……',
     author: '苏雅文',
     role: 'EAP 高级咨询顾问',
     helpful: 356,
   },
   {
     tags: ['家庭', '异地', '亲子'],
-    title: '常年在外驻守，如何维系家庭关系？',
+    title: '工作繁忙或长期出差，如何维系家庭关系？',
     answer: '距离不必然带来疏远。规律的「非事务性沟通」——每周一次不谈工作也不谈账单的通话，才是关系的养分……',
     author: '陈牧之',
     role: '婚姻家庭治疗师',
@@ -48,27 +51,27 @@ const QA_LIST = [
 
 const STORIES = [
   {
-    tag: '一线故事',
-    title: '在千米高的塔吊上，我学会了与焦虑共处',
-    excerpt: '第一次登上 380 米高的塔吊时，我在夜里失眠了整整两周。EAP 咨询让我重新找回了对高度的掌控感。',
+    tag: '职场故事',
+    title: '在高压节奏中，我学会了与焦虑共处',
+    excerpt: '连续加班的两个月里，我夜里反复失眠。EAP 咨询让我重新找回了对生活的掌控感。',
     tags: ['告别工作焦虑', '重建自我掌控'],
-    author: '塔吊司机 · 老张',
+    author: '研发工程师 · 老张',
     duration: '6 分钟',
     img: 'workers',
   },
   {
     tag: '管理者故事',
     title: '从「压不住脾气」到「稳得住团队」',
-    excerpt: '作为项目经理，我曾经天天在工地上发火。心理咨询让我看见了愤怒背后真正的责任焦虑。',
+    excerpt: '作为部门负责人，我曾经天天对团队发火。心理咨询让我看见了愤怒背后真正的责任焦虑。',
     tags: ['情绪管理', '领导力提升'],
-    author: '项目经理 · 王总',
+    author: '部门经理 · 王总',
     duration: '8 分钟',
     img: 'manager',
   },
   {
     tag: '家庭故事',
     title: '异地八年，我们没有走散',
-    excerpt: '爱人在深圳，我在重庆的工地上。EAP 家庭咨询帮我们重新学会了「隔着屏幕也能靠近」。',
+    excerpt: '爱人在深圳，我在外地长期出差。EAP 家庭咨询帮我们重新学会了「隔着屏幕也能靠近」。',
     tags: ['异地关系', '亲密沟通'],
     author: '技术员 · 小周',
     duration: '7 分钟',
@@ -76,42 +79,12 @@ const STORIES = [
   },
 ];
 
-const ARTICLES = [
-  {
-    title: '深夜工棚的独处时刻',
-    excerpt: '当整个工地陷入寂静，那些白天被压下去的情绪会悄悄浮出水面。你不孤单——这是常见的心理反应……',
-    tags: ['独处', '一线员工'],
-    duration: '8 分钟阅读',
-    cover: 'night',
-    img: '/assets/article-night.jpg',
-  },
-  {
-    title: '给正在焦虑的自己写一封信',
-    excerpt: '如果可以给三个月前的自己写一封信，你会说什么？书写是一种被证明有效的情绪整理方式……',
-    tags: ['自我关怀', '情绪疏导'],
-    duration: '6 分钟阅读',
-    cover: 'letter',
-    img: '/assets/article-letter.jpg',
-  },
-  {
-    title: '开工日的心理调适指南',
-    excerpt: '春节结束返回项目部，「开工综合症」是很正常的。用这 5 个方法平稳过渡……',
-    tags: ['节后调适', '实用指南'],
-    duration: '5 分钟阅读',
-    cover: 'return',
-    img: '/assets/article-return.jpg',
-  },
-];
+const ARTICLES = getHomeArticles();
 
-const AUDIOS = [
-  { title: '睡前冥想：放下今天的疲惫', series: '晚安工地', dur: '01:30', plays: '2.8万', src: '/assets/audio-sleep-new.mp3' },
-  { title: '通勤路上的呼吸练习', series: '每日五分钟', dur: '00:25', plays: '3.4万', src: '/assets/audio-breath.mp3' },
-  { title: '与内在小孩对话', series: '深度疗愈', dur: '00:21', plays: '1.6万', src: '/assets/audio-inner-child.mp3' },
-  { title: '给悲伤一个出口：情绪释放练习', series: '深度疗愈', dur: '01:30', plays: '1.9万', src: '/assets/audio-emotion-release.mp3' },
-];
+const AUDIOS = getHomeAudios();
 
 const COUNSELORS = [
-  { name: '林晚晴', title: '国家二级心理咨询师', tags: ['职场焦虑', '失眠', '一线员工'], years: '12 年', cases: '1200+' },
+  { name: '林晚晴', title: '国家二级心理咨询师', tags: ['职场焦虑', '失眠', '情绪疏导'], years: '12 年', cases: '1200+' },
   { name: '苏雅文', title: 'EAP 高级顾问', tags: ['团队管理', '中层压力'], years: '15 年', cases: '1800+' },
   { name: '陈牧之', title: '婚姻家庭治疗师', tags: ['异地情感', '亲子关系'], years: '10 年', cases: '960+' },
   { name: '周航', title: '临床心理学博士', tags: ['创伤修复', '职业倦怠'], years: '18 年', cases: '2100+' },
@@ -164,7 +137,7 @@ const Icon = ({ name, size = 24, color = 'currentColor', stroke = 1.6 }) => {
   return icons[name] || null;
 };
 
-// 简洁的建筑天际线 SVG（用于中建三局品牌感）
+// 简洁的建筑天际线 SVG（用于页脚装饰）
 const CitySkyline = ({ color = 'currentColor', opacity = 0.15, height = 80 }) => (
   <svg viewBox="0 0 1440 120" preserveAspectRatio="none" style={{ width: '100%', height, display: 'block', opacity }}>
     <path fill={color} d="M0,120 L0,80 L60,80 L60,60 L100,60 L100,40 L140,40 L140,55 L180,55 L180,25 L220,25 L220,45 L260,45 L260,15 L290,15 L290,35 L330,35 L330,50 L380,50 L380,20 L420,20 L420,40 L460,40 L460,60 L510,60 L510,30 L550,30 L550,10 L590,10 L590,35 L630,35 L630,55 L680,55 L680,25 L720,25 L720,45 L760,45 L760,65 L810,65 L810,30 L850,30 L850,15 L890,15 L890,40 L930,40 L930,20 L970,20 L970,50 L1010,50 L1010,35 L1060,35 L1060,55 L1100,55 L1100,25 L1140,25 L1140,45 L1180,45 L1180,20 L1220,20 L1220,40 L1260,40 L1260,60 L1310,60 L1310,30 L1350,30 L1350,50 L1400,50 L1400,70 L1440,70 L1440,120 Z"/>
@@ -174,7 +147,7 @@ const CitySkyline = ({ color = 'currentColor', opacity = 0.15, height = 80 }) =>
 // 建筑元素占位图（当没有真实图片时用）—— 用 CSS 渐变 + SVG 抽象化
 const PlaceholderImg = ({ variant = 'site', className = '', style = {} }) => {
   const gradients = {
-    site: 'linear-gradient(135deg, #C8D6E5 0%, #8395A7 100%)', // 工地
+    site: 'linear-gradient(135deg, #C8D6E5 0%, #8395A7 100%)', // 场景一
     office: 'linear-gradient(135deg, #DFE4EA 0%, #A4B0BE 100%)', // 办公
     family: 'linear-gradient(135deg, #FADBD8 0%, #F5B7B1 100%)', // 家庭
     workers: 'linear-gradient(135deg, #FFB74D 0%, #F57C00 100%)',

@@ -11,10 +11,10 @@ import type { ThemeTweaks } from '@/lib/tokens';
 const OnboardingAssessment = ({
   tweaks,
   scales,
-  companyName = '中建三局集团有限公司',
-  siteName = '广厦心安',
+  companyName = '员工心理关爱平台',
+  siteName = '心安 EAP',
   logoUrl = '/assets/guangsha-xinan-logo.jpg',
-  slogan = '建广厦万间，护心安一寸',
+  slogan = '专业测评，贴心陪伴',
   homeHref = '/',
 }: {
   tweaks?: ThemeTweaks;
@@ -306,11 +306,11 @@ const StepConsent = ({ primary, primaryDark, accent, companyName, onNext, onBack
         <div style={{ border: '1px solid #E8ECF3', borderRadius: 6, padding: '24px 28px', maxHeight: 260, overflowY: 'auto', fontSize: 13, color: '#4A5A78', lineHeight: 1.9 }}>
           <div style={{ fontSize: 14, fontWeight: 600, color: '#0F2E5F', marginBottom: 12 }}>《心理测评知情同意书》</div>
           <p style={{ margin: '0 0 12px' }}><strong>一、测评目的</strong><br/>本次测评旨在帮助您了解自身心理健康状态，建立个人心理基线档案，并为您提供个性化的心理支持建议。</p>
-          <p style={{ margin: '0 0 12px' }}><strong>二、保密条款</strong><br/>1. 您的测评结果仅您本人可见；<br/>2. 数据由第三方 EAP 机构（连心心理）独立存储，{companyName}人事、行政、您的直接上级均无权访问原始数据；<br/>3. 仅在您签署额外授权后，才可向指定咨询师分享测评结果；<br/>4. 聚合数据（部门/项目部级别）会用于内部心理健康趋势分析，但已完全脱敏。</p>
+          <p style={{ margin: '0 0 12px' }}><strong>二、保密条款</strong><br/>1. 您的测评结果仅您本人可见；<br/>2. 数据由第三方 EAP 机构独立存储，企业人事、行政、您的直接上级均无权访问原始数据；<br/>3. 仅在您签署额外授权后，才可向指定咨询师分享测评结果；<br/>4. 聚合数据（部门级别）会用于内部心理健康趋势分析，但已完全脱敏。</p>
           <p style={{ margin: '0 0 12px' }}><strong>三、异常情况处理</strong><br/>若测评结果显示您可能存在严重的心理困扰或自伤自杀风险，EAP 咨询师将主动通过系统内消息联系您，此过程<strong>不会通知任何管理者</strong>。</p>
           <p style={{ margin: '0 0 12px' }}><strong>四、您的权利</strong><br/>1. 随时中止测评；<br/>2. 随时申请删除您的全部数据；<br/>3. 申请导出个人测评报告；<br/>4. 对结果解读申请免费复议咨询。</p>
           <p style={{ margin: '0 0 12px' }}><strong>五、数据保存期限</strong><br/>您的原始测评数据保存 3 年，之后自动匿名化归档。</p>
-          <p style={{ margin: 0 }}>如有疑问，请联系 EAP 服务电话 400-880-6666，或发送邮件至 privacy@guangsha-xinan.com。</p>
+          <p style={{ margin: 0 }}>如有疑问，请联系 EAP 服务电话 400-880-6666，或发送邮件至 privacy@eap-service.com。</p>
         </div>
 
         {/* 确认框 */}
@@ -376,17 +376,17 @@ const StepBasic = ({ primary, primaryDark, onNext, onBack }) => {
         {/* 岗位信息 */}
         <FormGroupTitle primary={primary} icon="building" style={{ marginTop: 32 }}>岗位信息</FormGroupTitle>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-          <FormField label="所属部门 / 项目部" required>
-            <input type="text" placeholder="例如 三公司深圳湾一号项目部" value={form.dept} onChange={e => set('dept', e.target.value)} style={fieldStyle}/>
+          <FormField label="所属部门" required>
+            <input type="text" placeholder="例如 人力资源部 / 产品研发部" value={form.dept} onChange={e => set('dept', e.target.value)} style={fieldStyle}/>
           </FormField>
           <FormField label="岗位" required>
-            <input type="text" placeholder="例如 土建施工员" value={form.post} onChange={e => set('post', e.target.value)} style={fieldStyle}/>
+            <input type="text" placeholder="例如 产品经理 / 行政专员" value={form.post} onChange={e => set('post', e.target.value)} style={fieldStyle}/>
           </FormField>
           <FormField label="岗位类别" required>
-            <SegmentedControl options={['一线施工', '项目管理', '机关职能', '技术研发']} value={form.category} onChange={v => set('category', v)} primary={primary}/>
+            <SegmentedControl options={['一线业务', '项目管理', '职能支持', '技术研发']} value={form.category} onChange={v => set('category', v)} primary={primary}/>
           </FormField>
           <FormField label="工作地" required>
-            <SegmentedControl options={['项目现场', '公司机关', '总部']} value={form.workLoc} onChange={v => set('workLoc', v)} primary={primary}/>
+            <SegmentedControl options={['办公现场', '公司本部', '远程办公']} value={form.workLoc} onChange={v => set('workLoc', v)} primary={primary}/>
           </FormField>
         </div>
 
@@ -394,7 +394,7 @@ const StepBasic = ({ primary, primaryDark, onNext, onBack }) => {
         <FormGroupTitle primary={primary} icon="heart" style={{ marginTop: 32 }}>生活情况 <span style={{ fontSize: 11, color: '#8B96A8', fontWeight: 400, marginLeft: 8 }}>选填 · 用于识别支持系统</span></FormGroupTitle>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           <FormField label="居住状况">
-            <SegmentedControl options={['与家人同住', '独居', '项目部宿舍', '合租']} value={form.livingStatus} onChange={v => set('livingStatus', v)} primary={primary}/>
+            <SegmentedControl options={['与家人同住', '独居', '单位宿舍', '合租']} value={form.livingStatus} onChange={v => set('livingStatus', v)} primary={primary}/>
           </FormField>
           <FormField label="是否与家人异地">
             <SegmentedControl options={['同城', '异地', '暂无家人']} value={form.hasFamily} onChange={v => set('hasFamily', v)} primary={primary}/>
@@ -453,7 +453,7 @@ const SCALES = [
   {
     id: 'adapt',
     name: '工作适应性问卷',
-    subtitle: '中建定制 · 岗位适应度评估',
+    subtitle: '岗位适应度评估',
     dur: '5 分钟',
     total: 20,
     demoTotal: 5,
@@ -463,7 +463,7 @@ const SCALES = [
     items: [
       '我对未来 3 个月的工作内容有比较清晰的了解',
       '我认为我目前的岗位与我的能力和兴趣相匹配',
-      '我能适应项目部/工作现场的工作节奏',
+      '我能适应当前岗位的工作节奏',
       '我与同事的沟通与协作比较顺畅',
       '我感到我可以从领导那里获得必要的指导',
     ],
@@ -724,12 +724,12 @@ const StepReport = ({ assessmentCount, questionCount, primary, primaryDark, acce
 
   const suggestions = [
     { icon: 'clock', title: '关注睡眠质量', desc: '你的入睡时间偏长，推荐每天固定 20 分钟"睡前锚点"仪式，尝试收听《睡前冥想：放下今天的疲惫》', action: '预约睡眠专题咨询' },
-    { icon: 'group', title: '主动建立支持网络', desc: '新入职阶段建议主动参加项目部下周三的"新员工沙龙"，扩展社交支持圈', action: '查看近期活动' },
+    { icon: 'group', title: '主动建立支持网络', desc: '新入职阶段建议主动参加团队活动或新员工沙龙，扩展社交支持圈', action: '查看近期活动' },
     { icon: 'sparkle', title: '发挥你的优势', desc: '你的共情力与协作意愿是宝贵资源，可以主动承担团队沟通与协调工作', action: '了解 ENFJ 详解' },
   ];
 
   const recommendedCounselors = [
-    { name: '林晚晴', title: '国家二级心理咨询师', tags: ['职场焦虑', '失眠', '一线员工'], match: 92 },
+    { name: '林晚晴', title: '国家二级心理咨询师', tags: ['职场焦虑', '失眠', '情绪疏导'], match: 92 },
     { name: '陈牧之', title: '婚姻家庭治疗师', tags: ['异地情感', '亲子关系'], match: 78 },
   ];
 
