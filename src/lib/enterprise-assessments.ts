@@ -37,8 +37,8 @@ const FALLBACK_BRANDING: SiteBranding = {
 };
 
 /** 兼容后端 ApiResponseEnvelope：优先取 data，再回退顶层字段 */
-function unwrapPayload<T extends Record<string, unknown>>(raw: unknown): T | undefined {
-  if (!raw || typeof raw !== "object") return undefined;
+function unwrapPayload<T extends object>(raw: unknown): T | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
   const obj = raw as Record<string, unknown>;
   const nested = obj.data;
   if (nested && typeof nested === "object" && !Array.isArray(nested)) {
