@@ -15,56 +15,67 @@ import { getCounselorSlug } from '@/lib/counselor-profiles';
 // 方案一：稳重经典 —— 深蓝主导
 // 特点：顶部深色导航、大幅数据展示、卡片式网格、庄重的排版
 
+const DEFAULT_BRANDING_FALLBACK: SiteBranding = {
+  siteName: '心安 EAP',
+  companyName: '',
+  logoUrl: '/static/uploads/eap-default-logo.png',
+  slogan: '专业测评，贴心陪伴',
+  onboardingEntryLabel: '新员工入职测评',
+  heroSlides: [
+    { imageUrl: '/assets/hero-site.jpg', title: '心理测评', desc: '专业量表，帮助你更好认识自己' },
+    { imageUrl: '/assets/hero-office.jpg', title: '职场支持', desc: '关注工作压力与情绪健康' },
+    { imageUrl: '/assets/hero-family.jpg', title: '生活与家庭', desc: '陪伴你与家人共同成长' },
+  ],
+};
+
 const DesignV1 = ({
   tweaks,
-  branding = {
-    siteName: '心安 EAP',
-    companyName: '',
-    logoUrl: '/assets/guangsha-xinan-logo.jpg',
-    slogan: '专业测评，贴心陪伴',
-  },
+  branding,
   homeHref = '/',
   onboardingHref = '/onboarding',
   counselors,
 }: {
   tweaks?: ThemeTweaks;
-  branding?: SiteBranding;
+  branding?: SiteBranding | null;
   homeHref?: string;
   onboardingHref?: string;
   counselors?: CounselorCard[];
 }) => {
+  const [heroSlide, setHeroSlide] = React.useState(0);
   const primary = tweaks?.primary || '#1E4C9A';
   const primaryDark = tweaks?.primaryDark || '#0F2E5F';
   const accent = tweaks?.accent || '#C8161D';
   const warm = tweaks?.warm || '#F5EFE6';
+  const brand = branding || DEFAULT_BRANDING_FALLBACK;
   const counselorList = counselors?.length ? counselors : MOCK_COUNSELORS;
-  const companyName = (branding.companyName || '').trim();
-  const [heroSlide, setHeroSlide] = React.useState(0);
-  const heroScenes = [
-    { variant: 'site', img: '/assets/hero-site.jpg', title: '心理测评', desc: '专业量表，帮助你更好认识自己' },
-    { variant: 'office', img: '/assets/hero-office.jpg', title: '职场支持', desc: '关注工作压力与情绪健康' },
-    { variant: 'family', img: '/assets/hero-family.jpg', title: '生活与家庭', desc: '陪伴你与家人共同成长' },
-  ];
+  const companyName = (brand.companyName || '').trim();
+  const onboardingEntryLabel = (brand.onboardingEntryLabel || '').trim() || '新员工入职测评';
+  const navItems = NAV_ITEMS.map((item) => (
+    item.href === '/onboarding' ? { ...item, label: onboardingEntryLabel } : item
+  ));
+  const heroScenes = (brand.heroSlides?.length ? brand.heroSlides : DEFAULT_BRANDING_FALLBACK.heroSlides)
+    .map((slide) => ({
+      img: slide.imageUrl,
+      title: slide.title,
+      desc: slide.desc,
+    }));
 
   React.useEffect(() => {
-    const t = setInterval(() => setHeroSlide(s => (s + 1) % 3), 4500);
+    if (heroScenes.length <= 1) return undefined;
+    const t = setInterval(() => setHeroSlide((s) => (s + 1) % heroScenes.length), 4500);
     return () => clearInterval(t);
-  }, []);
+  }, [heroScenes.length]);
 
   return (
     <div style={{ background: '#FFFFFF', color: '#1A2846', fontFamily: '"Noto Sans SC", "PingFang SC", system-ui, sans-serif' }}>
 
       {/* ==================== 顶部通知条 ==================== */}
       <div style={{ background: primaryDark, color: '#fff', fontSize: 13, padding: '10px 0' }}>
-        <div style={{ maxWidth: 1360, margin: '0 auto', padding: '0 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} className="gxa-topbar">
+        <div style={{ maxWidth: 1360, margin: '0 auto', padding: '0 40px', display: 'flex', alignItems: 'center' }} className="gxa-topbar">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: .9 }}>
             <Icon name="shield" size={14} />
             <span>本平台严格执行保密协议 · 一切咨询记录不进入人事档案</span>
           </div>
-          <a href="tel:4008806666" style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#FFC4A0', textDecoration: 'none', fontSize: 13 }}>
-            <Icon name="phone" size={14} />
-            <strong>24h 心理热线 400-880-6666</strong>
-          </a>
         </div>
       </div>
 
@@ -72,9 +83,9 @@ const DesignV1 = ({
       <header style={{ background: '#fff', borderBottom: '1px solid #E8ECF3', position: 'sticky', top: 0, zIndex: 50 }}>
         <div style={{ maxWidth: 1360, margin: '0 auto', padding: '18px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <a href={homeHref} style={{ display: 'flex', alignItems: 'center', gap: 14, textDecoration: 'none', color: 'inherit' }}>
-            <img src={branding.logoUrl} alt={branding.siteName} style={{ height: 48, width: 48, borderRadius: 6, objectFit: 'cover' }}/>
+            <img src={brand.logoUrl} alt={brand.siteName} style={{ height: 48, width: 48, borderRadius: 6, objectFit: 'cover' }}/>
             <div>
-              <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: 2, color: primary, fontFamily: '"Noto Serif SC", serif' }}>{branding.siteName}</div>
+              <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: 2, color: primary, fontFamily: '"Noto Serif SC", serif' }}>{brand.siteName}</div>
               {companyName ? (
                 <div style={{ fontSize: 11, color: '#4A5A78', letterSpacing: 1, marginTop: 2 }}>{companyName}</div>
               ) : null}
@@ -82,7 +93,7 @@ const DesignV1 = ({
           </a>
 
           <nav className="gxa-nav-desktop" style={{ display: 'flex', alignItems: 'center', gap: 32 }}>
-            {NAV_ITEMS.map(item => (
+            {navItems.map(item => (
               <a key={item.label} href={item.href === '/onboarding' ? onboardingHref : item.href} style={{
                 color: '#1A2846', textDecoration: 'none',
                 fontSize: 15, fontWeight: 500,
@@ -109,7 +120,11 @@ const DesignV1 = ({
                 预约咨询
               </a>
             </div>
-            <MobileNav siteName={branding.siteName} onboardingHref={onboardingHref} />
+            <MobileNav
+              siteName={brand.siteName}
+              onboardingHref={onboardingHref}
+              onboardingEntryLabel={onboardingEntryLabel}
+            />
           </div>
         </div>
       </header>
@@ -128,7 +143,7 @@ const DesignV1 = ({
             </div>
 
             <h1 className="gxa-hero-title" style={{ fontFamily: '"Noto Serif SC", serif', fontSize: 62, fontWeight: 700, lineHeight: 1.15, letterSpacing: 2, margin: 0, color: '#0F2E5F' }}>
-              {branding.slogan}
+              {brand.slogan}
             </h1>
 
             <p style={{ fontSize: 17, lineHeight: 1.9, color: '#4A5A78', marginTop: 32, maxWidth: 520 }}>
@@ -142,7 +157,7 @@ const DesignV1 = ({
                 预约心理咨询 <Icon name="arrow" size={16} />
               </a>
               <a href={onboardingHref} style={{ background: '#fff', color: primary, border: `1.5px solid ${primary}`, padding: '16px 32px', fontSize: 15, borderRadius: 4, cursor: 'pointer', fontWeight: 500, textDecoration: 'none' }}>
-                新员工入职测评
+                {onboardingEntryLabel}
               </a>
             </div>
 
@@ -320,7 +335,7 @@ const DesignV1 = ({
                       fontFamily: '"Noto Serif SC", serif', letterSpacing: 1,
                       lineHeight: 1.3,
                     }}>
-                      {m.title}
+                      {m.id === 'onboarding' ? onboardingEntryLabel : m.title}
                       {m.urgent && !isNew && <span style={{ fontSize: 11, color: accent, marginLeft: 8, padding: '2px 8px', background: `${accent}12`, borderRadius: 3, fontFamily: 'sans-serif', letterSpacing: 0 }}>紧急</span>}
                     </h3>
                     <p style={{
@@ -505,7 +520,15 @@ const DesignV1 = ({
       </section>
 
       {/* ==================== 页脚 ==================== */}
-      <Footer branding={branding} primary={primary} primaryDark={primaryDark} accent={accent}/>
+      <Footer
+        branding={brand}
+        onboardingEntryLabel={onboardingEntryLabel}
+        onboardingHref={onboardingHref}
+        homeHref={homeHref}
+        primary={primary}
+        primaryDark={primaryDark}
+        accent={accent}
+      />
 
       <style>{`
         .module-card:hover {
@@ -543,12 +566,37 @@ const SectionTitle = ({ eyebrow, title, desc, primary, align = 'center' }) => (
 );
 
 // 页脚组件
-const Footer = ({ branding, primary, primaryDark, accent }) => {
+const Footer = ({ branding, onboardingEntryLabel, onboardingHref = '/onboarding', homeHref = '/', primary, primaryDark, accent }) => {
   const companyName = (branding.companyName || '').trim();
+  const entryLabel = (onboardingEntryLabel || '').trim() || '新员工入职测评';
+  const hashHref = (hash) => (homeHref === '/' ? `#${hash}` : `${homeHref}#${hash}`);
+  const columns = [
+    {
+      title: '心理服务',
+      items: [
+        { label: entryLabel, href: onboardingHref },
+        { label: '心理知识库', href: hashHref('library') },
+        { label: '心理测评', href: onboardingHref },
+      ],
+    },
+    {
+      title: '专业支持',
+      items: [
+        { label: '预约咨询', href: hashHref('consultation') },
+      ],
+    },
+    {
+      title: '关于我们',
+      items: [
+        { label: '品牌介绍', href: '/about' },
+        { label: '联系我们', href: '/contact' },
+      ],
+    },
+  ];
   return (
   <footer style={{ background: '#0A1E42', color: 'rgba(255,255,255,.7)', padding: '70px 0 30px' }}>
     <div style={{ maxWidth: 1360, margin: '0 auto', padding: '0 40px' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr 1fr', gap: 60, paddingBottom: 50, borderBottom: '1px solid rgba(255,255,255,.1)' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr', gap: 60, paddingBottom: 50, borderBottom: '1px solid rgba(255,255,255,.1)' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
             <img src={branding.logoUrl} alt="" style={{ height: 44, width: 44, borderRadius: 4 }}/>
@@ -563,22 +611,20 @@ const Footer = ({ branding, primary, primaryDark, accent }) => {
             专业心理测评 · 一对一咨询陪伴<br/>
             为每一位员工提供专业、保密、全天候的心理支持
           </p>
-          <div style={{ marginTop: 24, padding: 20, background: 'rgba(200,22,29,.15)', borderLeft: `3px solid ${accent}`, borderRadius: 3 }}>
-            <div style={{ fontSize: 12, color: '#fff', opacity: .85, marginBottom: 4 }}>24 小时心理热线</div>
-            <div style={{ fontSize: 22, color: '#fff', fontWeight: 700, fontFamily: '"Noto Serif SC", serif' }}>400-880-6666</div>
-          </div>
         </div>
-        {[
-          { title: '心理服务', items: ['新员工入职测评', '心理知识库', '预约咨询', '心理测评'] },
-          { title: '专业支持', items: ['24h 心理热线', '首次入职咨询免费', '匿名保密承诺', 'EAP 机构 · 连心心理'] },
-          { title: '关于我们', items: ['服务承诺', '咨询师团队', '合作机构', '常见问题'] },
-          { title: '合规与安全', items: ['隐私保护政策', '保密协议', '服务条款', '资质证照'] },
-        ].map(col => (
+        {columns.map(col => (
           <div key={col.title}>
             <h4 style={{ color: '#fff', fontSize: 14, margin: '0 0 20px', fontWeight: 600 }}>{col.title}</h4>
             <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
               {col.items.map(item => (
-                <li key={item}><a href="#" style={{ color: 'rgba(255,255,255,.65)', textDecoration: 'none', fontSize: 13 }}>{item}</a></li>
+                <li key={item.label}>
+                  <a
+                    href={item.href}
+                    style={{ color: 'rgba(255,255,255,.65)', textDecoration: 'none', fontSize: 13 }}
+                  >
+                    {item.label}
+                  </a>
+                </li>
               ))}
             </ul>
           </div>

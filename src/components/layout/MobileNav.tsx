@@ -8,13 +8,19 @@ import { tokens } from '@/lib/tokens';
 export default function MobileNav({
   siteName = '心安 EAP',
   onboardingHref = '/onboarding',
+  onboardingEntryLabel = '新员工入职测评',
 }: {
   siteName?: string;
   onboardingHref?: string;
+  onboardingEntryLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const primary = tokens.primary;
   const accent = tokens.accent;
+  const entryLabel = (onboardingEntryLabel || '').trim() || '新员工入职测评';
+  const navItems = NAV_ITEMS.map((item) => (
+    item.href === '/onboarding' ? { ...item, label: entryLabel } : item
+  ));
 
   useEffect(() => {
     document.body.style.overflow = open ? 'hidden' : '';
@@ -87,7 +93,7 @@ export default function MobileNav({
               </button>
             </div>
 
-            {NAV_ITEMS.map((item) => (
+            {navItems.map((item) => (
               <Link
                 key={item.label}
                 href={item.href === '/onboarding' ? onboardingHref : item.href}
@@ -124,24 +130,6 @@ export default function MobileNav({
               </Link>
             ))}
 
-            <a
-              href="tel:4008806666"
-              style={{
-                marginTop: 16,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '14px 12px',
-                background: `${primary}0C`,
-                color: primary,
-                textDecoration: 'none',
-                borderRadius: 6,
-                fontWeight: 600,
-              }}
-            >
-              <Icon name="phone" size={16} />
-              24h 热线 400-880-6666
-            </a>
           </div>
         </div>
       )}
