@@ -1,5 +1,5 @@
 import type { CounselorCard } from '@/lib/counselors';
-import { MOCK_COUNSELORS, getCounselorsForHome } from '@/lib/counselors';
+import { MOCK_COUNSELORS, getCounselorsForList } from '@/lib/counselors';
 
 export type CounselorProfile = CounselorCard & {
   slug: string;
@@ -89,16 +89,13 @@ export function getMockCounselorProfiles(): CounselorProfile[] {
   return MOCK_COUNSELORS.map(withProfile);
 }
 
+/** 「了解更多」咨询师列表：真实模式只展示 API 数据，不再混入模拟咨询师。 */
 export async function getCounselorProfilesForList(): Promise<CounselorProfile[]> {
-  const result = await getCounselorsForHome();
-  // 列表页尽量展示更多：真实数据不足时用 mock 补足到至少 4 人
-  const base = result.items.length ? result.items : MOCK_COUNSELORS;
-  const merged = [...base];
-  for (const mock of MOCK_COUNSELORS) {
-    if (merged.length >= 8) break;
-    if (!merged.some((c) => c.name === mock.name)) merged.push(mock);
+  const result = await getCounselorsForList();
+  if (result.source === 'real') {
+    return result.items.map(withProfile);
   }
-  return merged.map(withProfile);
+  return MOCK_COUNSELORS.map(withProfile);
 }
 
 export async function getCounselorBySlug(slug: string): Promise<CounselorProfile | undefined> {

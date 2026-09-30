@@ -1,8 +1,10 @@
 /**
- * 首页咨询师数据：可用环境变量切换「模拟数据 / mini-production 真实数据」。
+ * 首页 / 列表咨询师数据：可用环境变量切换「模拟数据 / mini-production 真实数据」。
  *
  * USE_REAL_COUNSELORS=true  → 请求 MINI_PRODUCTION_API_BASE_URL 的公开咨询师列表
  * USE_REAL_COUNSELORS=false → 使用下方 MOCK_COUNSELORS（默认）
+ *
+ * 真实模式下失败时返回空列表，不再回退模拟咨询师。
  */
 
 import { unstable_noStore as noStore } from 'next/cache';
@@ -125,8 +127,25 @@ function mockResult(): HomeCounselorsResult {
   };
 }
 
-/** 服务端获取首页咨询师列表（仅在 Server Component / Route Handler 调用）。 */
-export async function getCounselorsForHome(): Promise<HomeCounselorsResult> {
+function emptyRealResult(): HomeCounselorsResult {
+  return { items: [], total: 0, source: 'real' };
+}
+
+function parseLimit(raw: string | undefined, fallback: number, max: number): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(1, Math.floor(n)));
+}
+
+type FetchCounselorsOptions = {
+  /** 每页条数；首页默认 COUNSELORS_FETCH_LIMIT，列表默认 COUNSELORS_LIST_FETCH_LIMIT */
+  limit?: number;
+};
+
+/** 服务端获取咨询师列表（仅在 Server Component / Route Handler 调用）。 */
+export async function fetchCounselors(
+  options: FetchCounselorsOptions = {},
+): Promise<HomeCounselorsResult> {
   // 禁止静态/ISR 缓存，确保 USE_REAL_COUNSELORS 等环境变量在进程重启后立即生效
   noStore();
 
@@ -139,10 +158,9 @@ export async function getCounselorsForHome(): Promise<HomeCounselorsResult> {
     process.env.MINI_PRODUCTION_API_BASE_URL ||
     'http://127.0.0.1:28000'
   ).replace(/\/$/, '');
-  const limit = Math.min(
-    12,
-    Math.max(1, Number(process.env.COUNSELORS_FETCH_LIMIT || 4) || 4),
-  );
+  const limit =
+    options.limit ??
+    parseLimit(process.env.COUNSELORS_FETCH_LIMIT, 4, 100);
 
   const url = `${apiBase}/api/mini/common/counselors?page=1&page_size=${limit}`;
   try {
@@ -153,15 +171,15 @@ export async function getCounselorsForHome(): Promise<HomeCounselorsResult> {
     });
     if (!res.ok) {
       console.error('[counselors] production API HTTP', res.status, url);
-      return mockResult();
+      return emptyRealResult();
     }
     const body = (await res.json()) as Record<string, unknown>;
     const itemsRaw = (body.items ||
       (body.data as Record<string, unknown> | undefined)?.items ||
       []) as unknown[];
     if (!Array.isArray(itemsRaw) || itemsRaw.length === 0) {
-      console.warn('[counselors] production API returned empty list, fallback to mock');
-      return mockResult();
+      console.warn('[counselors] production API returned empty list');
+      return emptyRealResult();
     }
     const items = itemsRaw
       .filter((row): row is Record<string, unknown> => !!row && typeof row === 'object')
@@ -169,7 +187,21 @@ export async function getCounselorsForHome(): Promise<HomeCounselorsResult> {
     const total = Number(body.total ?? items.length) || items.length;
     return { items, total, source: 'real' };
   } catch (err) {
-    console.error('[counselors] fetch production failed, fallback to mock', err);
-    return mockResult();
+    console.error('[counselors] fetch production failed', err);
+    return emptyRealResult();
   }
+}
+
+/** 首页精选咨询师（条数受 COUNSELORS_FETCH_LIMIT 限制）。 */
+export async function getCounselorsForHome(): Promise<HomeCounselorsResult> {
+  return fetchCounselors({
+    limit: parseLimit(process.env.COUNSELORS_FETCH_LIMIT, 4, 12),
+  });
+}
+
+/** 「了解更多」完整列表（条数受 COUNSELORS_LIST_FETCH_LIMIT 限制）。 */
+export async function getCounselorsForList(): Promise<HomeCounselorsResult> {
+  return fetchCounselors({
+    limit: parseLimit(process.env.COUNSELORS_LIST_FETCH_LIMIT, 50, 100),
+  });
 }

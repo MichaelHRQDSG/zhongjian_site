@@ -37,7 +37,7 @@ const DesignV1 = ({
   const primaryDark = tweaks?.primaryDark || '#0F2E5F';
   const accent = tweaks?.accent || '#C8161D';
   const warm = tweaks?.warm || '#F5EFE6';
-  const counselorList = counselors?.length ? counselors : MOCK_COUNSELORS;
+  const counselorList = counselors != null ? counselors : MOCK_COUNSELORS;
   const companyName = (branding.companyName || '').trim();
   const [heroSlide, setHeroSlide] = React.useState(0);
   const heroScenes = [
