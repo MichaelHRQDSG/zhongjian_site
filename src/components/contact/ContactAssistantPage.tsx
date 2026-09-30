@@ -2,19 +2,31 @@ import type { CSSProperties } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/shared/data';
 import { ASSISTANT_CONTACT, CONTACT_CENTERS } from '@/lib/contact-info';
+import type { SitePageContent } from '@/lib/site-content';
 import { tokens } from '@/lib/tokens';
 
 export function ContactAssistantPage({
   homeHref = '/',
   siteName = '心安 EAP',
+  intro,
 }: {
   homeHref?: string;
   siteName?: string;
+  intro?: SitePageContent;
 }) {
   const primary = tokens.primary;
   const primaryDark = tokens.primaryDark;
   const warm = tokens.warm;
   const assistant = ASSISTANT_CONTACT;
+  const title = intro?.title || '联系我们';
+  const subtitle = intro?.subtitle || '';
+  const paragraphs = intro?.paragraphs?.length
+    ? intro.paragraphs
+    : [
+        '预约咨询、改期与疑问，欢迎通过咨询中心地址、助理微信或电话与我们取得联系。',
+        '我们会在工作时间内尽快回复您。',
+      ];
+  const qrcodeSrc = intro?.assistantQrcodeUrl?.trim() || assistant.qrcodeSrc;
 
   return (
     <div style={{ minHeight: '100vh', background: '#FBFAF7', color: '#1A2846', fontFamily: '"Noto Sans SC", "PingFang SC", system-ui, sans-serif' }}>
@@ -26,20 +38,44 @@ export function ContactAssistantPage({
             </span>
             返回首页
           </Link>
-          <div style={{ fontSize: 14, color: '#4A5A78' }}>{siteName} · 联系助理</div>
+          <div style={{ fontSize: 14, color: '#4A5A78' }}>{siteName} · 联系我们</div>
         </div>
       </header>
 
       <main style={{ maxWidth: 880, margin: '0 auto', padding: '48px 24px 80px' }}>
-        <div style={{ fontSize: 13, color: primary, letterSpacing: 3, fontWeight: 500, marginBottom: 12 }}>CONTACT</div>
-        <h1 style={{ margin: 0, fontFamily: '"Noto Serif SC", serif', fontSize: 36, color: '#0F2E5F', letterSpacing: 2 }}>联系助理</h1>
-        <p style={{ margin: '14px 0 0', fontSize: 15, lineHeight: 1.85, color: '#4A5A78', maxWidth: 640 }}>
-          预约咨询、改期与疑问，欢迎通过咨询中心地址、助理微信或电话与我们取得联系。
-          我们会在工作时间内尽快回复您。
-        </p>
+        <div style={{
+          background: `linear-gradient(135deg, ${primary} 0%, ${primaryDark} 100%)`,
+          borderRadius: 12,
+          padding: '36px 32px',
+          color: '#fff',
+          boxShadow: `0 18px 40px -24px ${primary}88`,
+        }}>
+          <div style={{ fontSize: 13, letterSpacing: 3, opacity: 0.85, fontWeight: 500, marginBottom: 12 }}>CONTACT</div>
+          <h1 style={{ margin: 0, fontFamily: '"Noto Serif SC", serif', fontSize: 36, letterSpacing: 2 }}>{title}</h1>
+          {subtitle ? (
+            <p style={{ margin: '12px 0 0', fontSize: 15, opacity: 0.92 }}>{subtitle}</p>
+          ) : null}
+        </div>
 
-        {/* 咨询中心 */}
-        <section style={{ marginTop: 40, background: '#fff', border: '1px solid #E8ECF3', borderRadius: 8, padding: '28px 28px 24px' }}>
+        {paragraphs.length ? (
+          <section style={{ marginTop: 20, background: '#fff', border: '1px solid #E8ECF3', borderRadius: 8, padding: '22px 24px' }}>
+            {paragraphs.map((paragraph, index) => (
+              <p
+                key={`${index}-${paragraph.slice(0, 10)}`}
+                style={{
+                  margin: index === 0 ? 0 : '12px 0 0',
+                  fontSize: 15,
+                  lineHeight: 1.85,
+                  color: '#4A5A78',
+                }}
+              >
+                {paragraph}
+              </p>
+            ))}
+          </section>
+        ) : null}
+
+        <section style={{ marginTop: 20, background: '#fff', border: '1px solid #E8ECF3', borderRadius: 8, padding: '28px 28px 24px' }}>
           <h2 style={sectionTitleStyle}>咨询中心地址</h2>
           <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
             {CONTACT_CENTERS.map((center) => (
@@ -56,13 +92,12 @@ export function ContactAssistantPage({
           </div>
         </section>
 
-        {/* 二维码 + 电话 */}
         <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: 20 }} className="contact-grid">
           <section style={{ background: '#fff', border: '1px solid #E8ECF3', borderRadius: 8, padding: 28, textAlign: 'center' }}>
             <h2 style={{ ...sectionTitleStyle, textAlign: 'center' }}>助理微信二维码</h2>
             <p style={{ margin: '12px 0 0', fontSize: 13, lineHeight: 1.7, color: '#4A5A78' }}>{assistant.hint}</p>
             <div style={{ margin: '22px auto 0', width: 220, height: 220, borderRadius: 8, overflow: 'hidden', border: '1px solid #E8ECF3', background: '#FBFAF7' }}>
-              <img src={assistant.qrcodeSrc} alt="咨询助理微信二维码" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+              <img src={qrcodeSrc} alt="咨询助理微信二维码" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
             </div>
             <div style={{ marginTop: 14, fontSize: 12, color: '#8B96A8' }}>长按或扫码添加助理微信</div>
             <div style={{ marginTop: 8, fontSize: 12, color: '#4A5A78' }}>{assistant.workHours}</div>

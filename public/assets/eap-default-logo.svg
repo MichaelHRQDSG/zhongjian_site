@@ -1,0 +1,11 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="EAP logo">
+  <defs>
+    <linearGradient id="bg" x1="48" y1="48" x2="464" y2="464" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0F2E5F"/>
+      <stop offset="100%" stop-color="#1E4C9A"/>
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="480" height="480" rx="96" fill="url(#bg)"/>
+  <path d="M256 392 C214 356 148 308 128 262 C108 216 128 168 168 152 C198 140 228 152 256 182 C284 152 314 140 344 152 C384 168 404 216 384 262 C364 308 298 356 256 392 Z" fill="none" stroke="#FFFFFF" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M256 204 L302 220 L302 268 C302 292 282 312 256 324 C230 312 210 292 210 268 L210 220 Z" fill="#FFFFFF"/>
+</svg>

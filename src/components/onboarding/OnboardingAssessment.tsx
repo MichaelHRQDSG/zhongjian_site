@@ -13,7 +13,7 @@ const OnboardingAssessment = ({
   scales,
   companyName = '员工心理关爱平台',
   siteName = '心安 EAP',
-  logoUrl = '/assets/guangsha-xinan-logo.jpg',
+  logoUrl = '/static/uploads/eap-default-logo.png',
   slogan = '专业测评，贴心陪伴',
   homeHref = '/',
 }: {

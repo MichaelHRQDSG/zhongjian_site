@@ -1,8 +1,18 @@
+export interface SiteHeroSlide {
+  imageUrl: string;
+  title: string;
+  desc: string;
+}
+
 export interface SiteBranding {
   companyName: string;
   siteName: string;
   logoUrl: string;
   slogan: string;
+  /** EAP 首页入职测评入口文案（导航 + 主按钮） */
+  onboardingEntryLabel: string;
+  /** EAP 首页右侧三张轮播 */
+  heroSlides: SiteHeroSlide[];
 }
 
 export interface EnterpriseAssessmentPayload extends SiteBranding {
@@ -29,11 +39,31 @@ const API_BASE_URL = (
   || "http://127.0.0.1:8000"
 ).replace(/\/$/, "");
 
+const FALLBACK_HERO_SLIDES: SiteHeroSlide[] = [
+  {
+    imageUrl: "/assets/hero-site.jpg",
+    title: "心理测评",
+    desc: "专业量表，帮助你更好认识自己",
+  },
+  {
+    imageUrl: "/assets/hero-office.jpg",
+    title: "职场支持",
+    desc: "关注工作压力与情绪健康",
+  },
+  {
+    imageUrl: "/assets/hero-family.jpg",
+    title: "生活与家庭",
+    desc: "陪伴你与家人共同成长",
+  },
+];
+
 const FALLBACK_BRANDING: SiteBranding = {
   siteName: "心安 EAP",
   companyName: "",
-  logoUrl: "/assets/guangsha-xinan-logo.jpg",
+  logoUrl: "/static/uploads/eap-default-logo.png",
   slogan: "专业测评，贴心陪伴",
+  onboardingEntryLabel: "新员工入职测评",
+  heroSlides: FALLBACK_HERO_SLIDES,
 };
 
 /** 兼容后端 ApiResponseEnvelope：优先取 data，再回退顶层字段 */
@@ -47,15 +77,33 @@ function unwrapPayload<T extends object>(raw: unknown): T | undefined {
   return obj as T;
 }
 
-function normalizeLogoUrl(logoUrl: string | undefined): string {
-  const value = (logoUrl || "").trim();
-  if (!value) return FALLBACK_BRANDING.logoUrl;
+function normalizeMediaUrl(url: string | undefined, fallback: string): string {
+  const value = (url || "").trim();
+  if (!value) return fallback;
   if (/^https?:\/\//i.test(value) || value.startsWith("data:")) return value;
-  // 后台上传文件在后端 /static/uploads；站点本地资源在 /assets
   if (value.startsWith("/static/")) {
     return `${API_BASE_URL}${value}`;
   }
   return value.startsWith("/") ? value : `/${value}`;
+}
+
+function normalizeLogoUrl(logoUrl: string | undefined): string {
+  return normalizeMediaUrl(logoUrl, FALLBACK_BRANDING.logoUrl);
+}
+
+function normalizeHeroSlides(raw: unknown): SiteHeroSlide[] {
+  const list = Array.isArray(raw) ? raw : [];
+  return FALLBACK_HERO_SLIDES.map((fallback, index) => {
+    const item = list[index];
+    const source = item && typeof item === "object" && !Array.isArray(item)
+      ? (item as Partial<SiteHeroSlide>)
+      : {};
+    return {
+      imageUrl: normalizeMediaUrl(source.imageUrl, fallback.imageUrl),
+      title: String(source.title || fallback.title).trim() || fallback.title,
+      desc: String(source.desc || fallback.desc).trim() || fallback.desc,
+    };
+  });
 }
 
 function normalizeBranding(raw: unknown): SiteBranding {
@@ -66,6 +114,10 @@ function normalizeBranding(raw: unknown): SiteBranding {
     companyName: String(payload.companyName ?? "").trim(),
     logoUrl: normalizeLogoUrl(payload.logoUrl),
     slogan: String(payload.slogan || FALLBACK_BRANDING.slogan).trim() || FALLBACK_BRANDING.slogan,
+    onboardingEntryLabel:
+      String(payload.onboardingEntryLabel || FALLBACK_BRANDING.onboardingEntryLabel).trim()
+      || FALLBACK_BRANDING.onboardingEntryLabel,
+    heroSlides: normalizeHeroSlides(payload.heroSlides),
   };
 }
 
