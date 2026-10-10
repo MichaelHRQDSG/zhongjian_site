@@ -21,6 +21,7 @@ export interface EnterpriseAssessmentPayload extends SiteBranding {
   employeeInfoFields?: string[];
   assessments: Array<{
     id: string;
+    version?: number;
     title: string;
     subtitle?: string;
     instructions?: string;
@@ -32,6 +33,19 @@ export interface EnterpriseAssessmentPayload extends SiteBranding {
       options: Array<{ id: string; text: string }>;
     }>;
   }>;
+}
+
+export interface EnterpriseReportSubmitItem {
+  clientSubmissionId: string;
+  assessmentId: string;
+  assessmentVersion: number;
+  answers: Record<string, string>;
+}
+
+export interface EnterpriseReportsSubmitPayload {
+  visitorKey: string;
+  employeeInfo: Record<string, unknown>;
+  reports: EnterpriseReportSubmitItem[];
 }
 
 /** 与后台默认员工信息模板一致的字段顺序 */
@@ -198,6 +212,7 @@ export function toOnboardingScales(payload: EnterpriseAssessmentPayload) {
     const questions = Array.isArray(assessment.questions) ? assessment.questions : [];
     return {
       id: assessment.id,
+      version: Number(assessment.version) > 0 ? Number(assessment.version) : 1,
       name: assessment.title || assessment.id,
       subtitle: assessment.subtitle || assessment.description || "企业专属量表",
       dur: `${assessment.duration || 0} 分钟`,
@@ -215,4 +230,35 @@ export function toOnboardingScales(payload: EnterpriseAssessmentPayload) {
       })),
     };
   });
+}
+
+/** 服务端可读的 API 根地址，供页面 props 传给客户端提交。 */
+export function getAssessmentApiBaseUrl() {
+  return API_BASE_URL;
+}
+
+export async function submitEnterpriseOnboardingReports(
+  apiBaseUrl: string,
+  slug: string,
+  body: EnterpriseReportsSubmitPayload,
+) {
+  const base = (apiBaseUrl || "").replace(/\/$/, "");
+  if (!base) {
+    throw new Error("未配置测评 API 地址");
+  }
+  const response = await fetch(
+    `${base}/api/web/assessment-enterprises/${encodeURIComponent(slug)}/reports`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+  const raw = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const envelope = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+    const detail = envelope.msg || envelope.detail || envelope.message || `提交失败（${response.status}）`;
+    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+  }
+  return unwrapPayload(raw) || raw;
 }

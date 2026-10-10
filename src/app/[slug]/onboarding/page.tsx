@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import OnboardingAssessment from "@/components/onboarding/OnboardingAssessment";
 import {
   fetchEnterpriseAssessments,
+  getAssessmentApiBaseUrl,
   toOnboardingScales,
 } from "@/lib/enterprise-assessments";
 
@@ -22,6 +23,8 @@ export default async function EnterpriseOnboardingPage({
       logoUrl={payload.logoUrl}
       slogan={payload.slogan}
       homeHref={`/${slug}`}
+      slug={slug}
+      apiBaseUrl={getAssessmentApiBaseUrl()}
       scales={toOnboardingScales(payload)}
       employeeInfoFields={payload.employeeInfoFields}
     />

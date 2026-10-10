@@ -3,10 +3,37 @@
 
 import React from 'react';
 import { Icon } from '@/components/shared/data';
+import { submitEnterpriseOnboardingReports } from '@/lib/enterprise-assessments';
 import type { ThemeTweaks } from '@/lib/tokens';
 
 // 新员工入职测评 · 完整流程页面
 // 6 个步骤：欢迎 → 说明 → 基础信息 → 量表答题 → 提交完成 → 报告预览
+
+const EMPTY_BASIC_FORM = {
+  empNo: '', name: '', gender: '', age: '', edu: '',
+  dept: '', post: '', category: '',
+  workLoc: '', joinDate: '',
+  livingStatus: '', hasFamily: '',
+};
+
+function createVisitorKey() {
+  try {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID().replace(/-/g, '');
+    }
+  } catch {}
+  return `vk${Date.now().toString(36)}${Math.random().toString(36).slice(2, 14)}`;
+}
+
+function createSubmissionId() {
+  try {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+  } catch {}
+  const hex = `${Date.now().toString(16)}${Math.random().toString(16).slice(2)}000000000000`.slice(0, 32);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
 
 const OnboardingAssessment = ({
   tweaks,
@@ -16,6 +43,8 @@ const OnboardingAssessment = ({
   logoUrl = '/static/uploads/eap-default-logo.png',
   slogan = '专业测评，贴心陪伴',
   homeHref = '/',
+  slug,
+  apiBaseUrl = '',
   employeeInfoFields,
 }: {
   tweaks?: ThemeTweaks;
@@ -25,6 +54,8 @@ const OnboardingAssessment = ({
   logoUrl?: string;
   slogan?: string;
   homeHref?: string;
+  slug?: string;
+  apiBaseUrl?: string;
   employeeInfoFields?: string[];
 }) => {
   const primary = tweaks?.primary || '#1E4C9A';
@@ -33,31 +64,148 @@ const OnboardingAssessment = ({
   const warm = tweaks?.warm || '#F5EFE6';
   const activeScales = Array.isArray(scales) && scales.length > 0 ? scales : SCALES;
   const activeQuestionCount = activeScales.reduce((total, scale) => total + (scale.items?.length || 0), 0);
-  const progressKey = `onb-step-${companyName || 'default'}`;
+  const storageScope = slug || companyName || 'default';
+  const progressKey = `onb-step-${storageScope}`;
+  const answersKey = `onb-answers-${storageScope}`;
+  const basicKey = `onb-basic-${storageScope}`;
+  const visitorKeyStorage = `onb-visitor-${storageScope}`;
   const allowedSteps = new Set(['welcome', 'consent', 'basic', 'scale', 'complete', 'report']);
 
   // 服务端与首屏客户端统一从 welcome 开始，避免 localStorage 造成 hydration 报错
   const [step, setStep] = React.useState('welcome');
   const [scaleIdx, setScaleIdx] = React.useState(0);
-  const [answers, setAnswers] = React.useState({});
+  const [answersByScale, setAnswersByScale] = React.useState({});
+  const [basicForm, setBasicForm] = React.useState(EMPTY_BASIC_FORM);
+  const [visitorKey, setVisitorKey] = React.useState('');
   const [progressReady, setProgressReady] = React.useState(false);
+  const [submitError, setSubmitError] = React.useState('');
+  const [submitDone, setSubmitDone] = React.useState(false);
+  const submittingRef = React.useRef(false);
 
   React.useEffect(() => {
     try {
       const saved = localStorage.getItem(progressKey);
-      if (saved && allowedSteps.has(saved)) {
+      if (saved && allowedSteps.has(saved) && saved !== 'complete' && saved !== 'report') {
         setStep(saved);
       }
-    } catch {}
+      const savedAnswers = localStorage.getItem(answersKey);
+      if (savedAnswers) {
+        const parsed = JSON.parse(savedAnswers);
+        if (parsed && typeof parsed === 'object') setAnswersByScale(parsed);
+      }
+      const savedBasic = localStorage.getItem(basicKey);
+      if (savedBasic) {
+        const parsed = JSON.parse(savedBasic);
+        if (parsed && typeof parsed === 'object') {
+          setBasicForm({ ...EMPTY_BASIC_FORM, ...parsed });
+        }
+      }
+      let key = localStorage.getItem(visitorKeyStorage) || '';
+      if (key.length < 8) {
+        key = createVisitorKey();
+        localStorage.setItem(visitorKeyStorage, key);
+      }
+      setVisitorKey(key);
+    } catch {
+      const key = createVisitorKey();
+      setVisitorKey(key);
+    }
     setProgressReady(true);
-  }, [progressKey]);
+  }, [progressKey, answersKey, basicKey, visitorKeyStorage]);
 
   React.useEffect(() => {
     if (!progressReady) return;
     try { localStorage.setItem(progressKey, step); } catch {}
   }, [progressKey, step, progressReady]);
 
+  React.useEffect(() => {
+    if (!progressReady) return;
+    try { localStorage.setItem(answersKey, JSON.stringify(answersByScale)); } catch {}
+  }, [answersKey, answersByScale, progressReady]);
+
+  React.useEffect(() => {
+    if (!progressReady) return;
+    try { localStorage.setItem(basicKey, JSON.stringify(basicForm)); } catch {}
+  }, [basicKey, basicForm, progressReady]);
+
   const goto = (s) => { setStep(s); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+
+  const setScaleAnswer = React.useCallback((scaleId, questionKey, value) => {
+    setAnswersByScale((current) => ({
+      ...current,
+      [scaleId]: {
+        ...(current[scaleId] || {}),
+        [questionKey]: value,
+      },
+    }));
+  }, []);
+
+  const handleScalesComplete = React.useCallback(async () => {
+    if (submittingRef.current || submitDone) {
+      goto('complete');
+      return;
+    }
+    if (!slug || !apiBaseUrl) {
+      // 演示量表（无企业 slug）仍可进入完成页
+      goto('complete');
+      return;
+    }
+    submittingRef.current = true;
+    setSubmitError('');
+    goto('complete');
+    try {
+      const reports = activeScales
+        .filter((scale) => scale?.id && scale.scale === 'dynamic')
+        .map((scale) => {
+          const raw = answersByScale[scale.id] || {};
+          const answers = {};
+          (scale.items || []).forEach((item, index) => {
+            const questionId = item?.id || String(index);
+            const value = raw[questionId] ?? raw[index];
+            if (value != null && value !== '') {
+              answers[questionId] = String(value);
+            }
+          });
+          return {
+            clientSubmissionId: createSubmissionId(),
+            assessmentId: scale.id,
+            assessmentVersion: Number(scale.version) > 0 ? Number(scale.version) : 1,
+            answers,
+          };
+        })
+        .filter((item) => Object.keys(item.answers).length > 0);
+
+      if (reports.length === 0) {
+        throw new Error('没有可提交的量表答案');
+      }
+
+      await submitEnterpriseOnboardingReports(apiBaseUrl, slug, {
+        visitorKey: visitorKey || createVisitorKey(),
+        employeeInfo: basicForm,
+        reports,
+      });
+      setSubmitDone(true);
+      try {
+        localStorage.removeItem(answersKey);
+        localStorage.removeItem(basicKey);
+        localStorage.setItem(progressKey, 'report');
+      } catch {}
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : '提交失败，请稍后重试');
+      submittingRef.current = false;
+    }
+  }, [
+    activeScales,
+    answersByScale,
+    answersKey,
+    apiBaseUrl,
+    basicForm,
+    basicKey,
+    progressKey,
+    slug,
+    submitDone,
+    visitorKey,
+  ]);
 
   return (
     <div style={{
@@ -83,12 +231,36 @@ const OnboardingAssessment = ({
             primary={primary}
             primaryDark={primaryDark}
             visibleFields={employeeInfoFields}
+            form={basicForm}
+            setForm={setBasicForm}
             onNext={() => { setScaleIdx(0); goto('scale'); }}
             onBack={() => goto('consent')}
           />
         )}
-        {step === 'scale' && <StepScale scales={activeScales} primary={primary} primaryDark={primaryDark} scaleIdx={scaleIdx} setScaleIdx={setScaleIdx} onComplete={() => goto('complete')} onBack={() => goto('basic')}/>}
-        {step === 'complete' && <StepComplete primary={primary} primaryDark={primaryDark} accent={accent} onNext={() => goto('report')}/>}
+        {step === 'scale' && (
+          <StepScale
+            scales={activeScales}
+            primary={primary}
+            primaryDark={primaryDark}
+            scaleIdx={scaleIdx}
+            setScaleIdx={setScaleIdx}
+            answersByScale={answersByScale}
+            setScaleAnswer={setScaleAnswer}
+            onComplete={handleScalesComplete}
+            onBack={() => goto('basic')}
+          />
+        )}
+        {step === 'complete' && (
+          <StepComplete
+            primary={primary}
+            primaryDark={primaryDark}
+            accent={accent}
+            error={submitError}
+            onRetry={submitError ? handleScalesComplete : undefined}
+            onNext={() => goto('report')}
+            canProceed={!submitError && (submitDone || !slug || !apiBaseUrl)}
+          />
+        )}
         {step === 'report' && <StepReport assessmentCount={activeScales.length} questionCount={activeQuestionCount} primary={primary} primaryDark={primaryDark} accent={accent} warm={warm} companyName={companyName} siteName={siteName} homeHref={homeHref}/>}
       </main>
 
@@ -351,7 +523,7 @@ const DEFAULT_VISIBLE_FIELDS = [
   'livingStatus', 'hasFamily',
 ];
 
-const StepBasic = ({ primary, primaryDark, onNext, onBack, visibleFields }) => {
+const StepBasic = ({ primary, primaryDark, onNext, onBack, visibleFields, form, setForm }) => {
   const shown = Array.isArray(visibleFields) && visibleFields.length > 0
     ? DEFAULT_VISIBLE_FIELDS.filter((id) => visibleFields.includes(id))
     : DEFAULT_VISIBLE_FIELDS;
@@ -360,12 +532,6 @@ const StepBasic = ({ primary, primaryDark, onNext, onBack, visibleFields }) => {
   const showJob = ['dept', 'post', 'category', 'workLoc'].some(show);
   const showLife = ['livingStatus', 'hasFamily'].some(show);
 
-  const [form, setForm] = React.useState({
-    empNo: '', name: '', gender: '', age: '', edu: '',
-    dept: '', post: '', category: '',
-    workLoc: '', joinDate: '',
-    livingStatus: '', hasFamily: '',
-  });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const required = DEFAULT_REQUIRED_FIELDS.filter((id) => show(id));
@@ -571,21 +737,34 @@ const SCALES = [
   },
 ];
 
-const StepScale = ({ scales, primary, primaryDark, scaleIdx, setScaleIdx, onComplete, onBack }) => {
+const StepScale = ({
+  scales,
+  primary,
+  primaryDark,
+  scaleIdx,
+  setScaleIdx,
+  answersByScale,
+  setScaleAnswer,
+  onComplete,
+  onBack,
+}) => {
   const safeIdx = Math.min(Math.max(scaleIdx, 0), Math.max(scales.length - 1, 0));
   const scale = scales[safeIdx];
-  const [answers, setAnswers] = React.useState({});
-  const answered = Object.keys(answers).length;
+  const scaleId = scale?.id || `scale-${safeIdx}`;
+  const answers = answersByScale[scaleId] || {};
+  const answerKey = (item, i) => (scale?.scale === 'dynamic' && item?.id != null ? item.id : i);
+  const answered = (scale?.items || []).filter((item, i) => {
+    const key = answerKey(item, i);
+    return answers[key] != null && answers[key] !== '';
+  }).length;
   const demoTotal = Math.max(Number(scale?.demoTotal) || 0, 1);
   const isComplete = answered >= demoTotal;
 
-  const setAns = (i, v) => setAnswers(a => ({ ...a, [i]: v }));
+  const setAns = (item, i, v) => setScaleAnswer(scaleId, answerKey(item, i), v);
 
   React.useEffect(() => {
     if (safeIdx !== scaleIdx) setScaleIdx(safeIdx);
   }, [safeIdx, scaleIdx, setScaleIdx]);
-
-  React.useEffect(() => { setAnswers({}); }, [safeIdx]);
 
   if (!scale) {
     return (
@@ -637,7 +816,10 @@ const StepScale = ({ scales, primary, primaryDark, scaleIdx, setScaleIdx, onComp
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {(scale.items || []).map((item, i) => (
+          {(scale.items || []).map((item, i) => {
+            const qKey = answerKey(item, i);
+            const selected = answers[qKey];
+            return (
             <div key={item?.id || i} style={{ padding: '20px 20px 24px', background: '#FBFAF7', borderRadius: 6 }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 16 }}>
                 <div style={{ width: 26, height: 26, borderRadius: '50%', background: primary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
@@ -655,11 +837,11 @@ const StepScale = ({ scales, primary, primaryDark, scaleIdx, setScaleIdx, onComp
               {scale.scale === 'dynamic' ? (
                 <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min((item.options || []).length || 1, 5)}, 1fr)`, gap: 8, paddingLeft: 38 }}>
                   {(item.options || []).map((option, oi) => (
-                    <button key={option.id || oi} onClick={() => setAns(i, option.id || oi)} style={{
+                    <button key={option.id || oi} onClick={() => setAns(item, i, option.id || oi)} style={{
                       padding: '12px 8px', textAlign: 'center',
-                      background: answers[i] === (option.id || oi) ? primary : '#fff',
-                      color: answers[i] === (option.id || oi) ? '#fff' : '#4A5A78',
-                      border: answers[i] === (option.id || oi) ? `1.5px solid ${primary}` : '1.5px solid #E8ECF3',
+                      background: selected === (option.id || oi) ? primary : '#fff',
+                      color: selected === (option.id || oi) ? '#fff' : '#4A5A78',
+                      border: selected === (option.id || oi) ? `1.5px solid ${primary}` : '1.5px solid #E8ECF3',
                       borderRadius: 4, cursor: 'pointer', fontSize: 13,
                     }}>
                       {option.label}
@@ -669,11 +851,11 @@ const StepScale = ({ scales, primary, primaryDark, scaleIdx, setScaleIdx, onComp
               ) : scale.scale === 'binary' ? (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   {[item.a, item.b].map((opt, oi) => (
-                    <button key={oi} onClick={() => setAns(i, oi)} style={{
+                    <button key={oi} onClick={() => setAns(item, i, oi)} style={{
                       padding: '18px 20px', textAlign: 'left',
-                      background: answers[i] === oi ? `${primary}12` : '#fff',
-                      border: answers[i] === oi ? `1.5px solid ${primary}` : '1.5px solid #E8ECF3',
-                      color: answers[i] === oi ? '#0F2E5F' : '#4A5A78',
+                      background: selected === oi ? `${primary}12` : '#fff',
+                      border: selected === oi ? `1.5px solid ${primary}` : '1.5px solid #E8ECF3',
+                      color: selected === oi ? '#0F2E5F' : '#4A5A78',
                       borderRadius: 6, cursor: 'pointer',
                       fontSize: 14, lineHeight: 1.7,
                       display: 'flex', alignItems: 'flex-start', gap: 12,
@@ -681,12 +863,12 @@ const StepScale = ({ scales, primary, primaryDark, scaleIdx, setScaleIdx, onComp
                     }}>
                       <div style={{
                         width: 20, height: 20, borderRadius: '50%',
-                        border: `2px solid ${answers[i] === oi ? primary : '#D0D6E0'}`,
+                        border: `2px solid ${selected === oi ? primary : '#D0D6E0'}`,
                         background: '#fff',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         flexShrink: 0, marginTop: 1,
                       }}>
-                        {answers[i] === oi && <div style={{ width: 10, height: 10, borderRadius: '50%', background: primary }}/>}
+                        {selected === oi && <div style={{ width: 10, height: 10, borderRadius: '50%', background: primary }}/>}
                       </div>
                       <span>{opt}</span>
                     </button>
@@ -695,13 +877,13 @@ const StepScale = ({ scales, primary, primaryDark, scaleIdx, setScaleIdx, onComp
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: `repeat(${scale.scaleLabels.length}, 1fr)`, gap: 8, paddingLeft: 38 }}>
                   {scale.scaleLabels.map((lbl, li) => (
-                    <button key={li} onClick={() => setAns(i, li)} style={{
+                    <button key={li} onClick={() => setAns(item, i, li)} style={{
                       padding: '12px 8px', textAlign: 'center',
-                      background: answers[i] === li ? primary : '#fff',
-                      color: answers[i] === li ? '#fff' : '#4A5A78',
-                      border: answers[i] === li ? `1.5px solid ${primary}` : '1.5px solid #E8ECF3',
+                      background: selected === li ? primary : '#fff',
+                      color: selected === li ? '#fff' : '#4A5A78',
+                      border: selected === li ? `1.5px solid ${primary}` : '1.5px solid #E8ECF3',
                       borderRadius: 4, cursor: 'pointer',
-                      fontSize: 13, fontWeight: answers[i] === li ? 600 : 400,
+                      fontSize: 13, fontWeight: selected === li ? 600 : 400,
                       transition: 'all .2s',
                     }}>
                       <div style={{ fontSize: 15, marginBottom: 4, fontWeight: 600 }}>{li + 1}</div>
@@ -711,7 +893,8 @@ const StepScale = ({ scales, primary, primaryDark, scaleIdx, setScaleIdx, onComp
                 </div>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
 
         <div style={{ marginTop: 24, padding: '12px 16px', background: `${primary}08`, borderRadius: 4, fontSize: 12, color: '#4A5A78', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -733,11 +916,37 @@ const StepScale = ({ scales, primary, primaryDark, scaleIdx, setScaleIdx, onComp
 };
 
 // ==================== Step 5: 完成提交 ====================
-const StepComplete = ({ primary, primaryDark, accent, onNext }) => {
+const StepComplete = ({ primary, primaryDark, accent, onNext, canProceed, error, onRetry }) => {
   React.useEffect(() => {
+    if (!canProceed) return undefined;
     const t = setTimeout(onNext, 3000);
     return () => clearTimeout(t);
-  }, [onNext]);
+  }, [canProceed, onNext]);
+
+  if (error) {
+    return (
+      <div style={{ textAlign: 'center', paddingTop: 80, paddingBottom: 80 }}>
+        <h1 style={{ fontFamily: '"Noto Serif SC", serif', fontSize: 32, fontWeight: 700, color: '#0F2E5F', margin: 0 }}>
+          结果保存失败
+        </h1>
+        <p style={{ fontSize: 15, color: '#C8161D', margin: '16px auto 0', maxWidth: 480, lineHeight: 1.8 }}>
+          {error}
+        </p>
+        {onRetry && (
+          <button
+            onClick={onRetry}
+            style={{
+              marginTop: 28, background: primary, color: '#fff', border: 'none',
+              padding: '14px 32px', borderRadius: 4, fontSize: 15, cursor: 'pointer',
+            }}
+          >
+            重新提交
+          </button>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div style={{ textAlign: 'center', paddingTop: 80, paddingBottom: 80 }}>
       {/* 圆环动画 */}
@@ -761,7 +970,7 @@ const StepComplete = ({ primary, primaryDark, accent, onNext }) => {
         测评已完成，感谢你的信任
       </h1>
       <p style={{ fontSize: 16, color: '#4A5A78', margin: '16px 0 8px', lineHeight: 1.8 }}>
-        你的心理档案正在生成中，请稍候……
+        {canProceed ? '你的心理档案正在生成中，请稍候……' : '正在保存你的量表结果，请稍候……'}
       </p>
       <p style={{ fontSize: 13, color: '#8B96A8' }}>
         通常需要 3-5 秒 · 报告将展示 4 大维度可视化图表与个性化建议
