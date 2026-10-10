@@ -1,20 +1,5 @@
 import type { Metadata, Viewport } from 'next';
-import { Noto_Sans_SC, Noto_Serif_SC } from 'next/font/google';
 import './globals.css';
-
-const notoSans = Noto_Sans_SC({
-  subsets: ['latin'],
-  weight: ['300', '400', '500', '600', '700'],
-  variable: '--font-noto-sans',
-  display: 'swap',
-});
-
-const notoSerif = Noto_Serif_SC({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-  variable: '--font-noto-serif',
-  display: 'swap',
-});
 
 export const metadata: Metadata = {
   title: '心安 EAP · 员工心理关爱平台',
@@ -32,7 +17,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="zh-CN">
-      <body className={`${notoSans.variable} ${notoSerif.variable} antialiased`}>{children}</body>
+      <body className="antialiased">{children}</body>
     </html>
   );
 }

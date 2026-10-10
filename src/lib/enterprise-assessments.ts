@@ -17,6 +17,8 @@ export interface SiteBranding {
 
 export interface EnterpriseAssessmentPayload extends SiteBranding {
   slug: string;
+  /** 企业链接需展示的员工基本信息字段 ID；未返回时前端按全部字段处理 */
+  employeeInfoFields?: string[];
   assessments: Array<{
     id: string;
     title: string;
@@ -30,6 +32,37 @@ export interface EnterpriseAssessmentPayload extends SiteBranding {
       options: Array<{ id: string; text: string }>;
     }>;
   }>;
+}
+
+/** 与后台默认员工信息模板一致的字段顺序 */
+export const DEFAULT_EMPLOYEE_INFO_FIELD_IDS = [
+  "empNo",
+  "name",
+  "gender",
+  "age",
+  "edu",
+  "joinDate",
+  "dept",
+  "post",
+  "category",
+  "workLoc",
+  "livingStatus",
+  "hasFamily",
+] as const;
+
+export function resolveEmployeeInfoFields(payload?: { employeeInfoFields?: string[] | null }) {
+  const raw = payload?.employeeInfoFields;
+  if (!Array.isArray(raw) || raw.length === 0) {
+    return [...DEFAULT_EMPLOYEE_INFO_FIELD_IDS];
+  }
+  const allowed = new Set<string>(DEFAULT_EMPLOYEE_INFO_FIELD_IDS);
+  const selected = new Set(
+    raw.map((value) => String(value || "").trim()).filter((value) => allowed.has(value)),
+  );
+  if (selected.size === 0) {
+    return [...DEFAULT_EMPLOYEE_INFO_FIELD_IDS];
+  }
+  return DEFAULT_EMPLOYEE_INFO_FIELD_IDS.filter((id) => selected.has(id));
 }
 
 const API_BASE_URL = (
@@ -135,6 +168,7 @@ export async function fetchEnterpriseAssessments(slug: string) {
     return {
       ...payload,
       ...branding,
+      employeeInfoFields: resolveEmployeeInfoFields(payload),
       assessments: Array.isArray(payload.assessments) ? payload.assessments : [],
     } as EnterpriseAssessmentPayload;
   } catch (error) {
@@ -160,19 +194,25 @@ export async function fetchDefaultBranding(): Promise<SiteBranding> {
 }
 
 export function toOnboardingScales(payload: EnterpriseAssessmentPayload) {
-  return payload.assessments.map((assessment) => ({
-    id: assessment.id,
-    name: assessment.title,
-    subtitle: assessment.subtitle || assessment.description || "企业专属量表",
-    dur: `${assessment.duration} 分钟`,
-    total: assessment.questions.length,
-    demoTotal: assessment.questions.length,
-    scale: "dynamic",
-    question: assessment.instructions || "请根据你的实际情况完成以下题目",
-    items: assessment.questions.map((question) => ({
-      id: question.id,
-      text: question.text,
-      options: question.options.map((option) => ({ ...option, label: option.text })),
-    })),
-  }));
+  return (payload.assessments || []).map((assessment) => {
+    const questions = Array.isArray(assessment.questions) ? assessment.questions : [];
+    return {
+      id: assessment.id,
+      name: assessment.title || assessment.id,
+      subtitle: assessment.subtitle || assessment.description || "企业专属量表",
+      dur: `${assessment.duration || 0} 分钟`,
+      total: questions.length,
+      demoTotal: questions.length,
+      scale: "dynamic" as const,
+      question: assessment.instructions || "请根据你的实际情况完成以下题目",
+      items: questions.map((question) => ({
+        id: question.id,
+        text: question.text,
+        options: (Array.isArray(question.options) ? question.options : []).map((option) => ({
+          ...option,
+          label: option.text,
+        })),
+      })),
+    };
+  });
 }

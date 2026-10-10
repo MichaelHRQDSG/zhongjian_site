@@ -16,6 +16,7 @@ const OnboardingAssessment = ({
   logoUrl = '/static/uploads/eap-default-logo.png',
   slogan = '专业测评，贴心陪伴',
   homeHref = '/',
+  employeeInfoFields,
 }: {
   tweaks?: ThemeTweaks;
   scales?: unknown[];
@@ -24,6 +25,7 @@ const OnboardingAssessment = ({
   logoUrl?: string;
   slogan?: string;
   homeHref?: string;
+  employeeInfoFields?: string[];
 }) => {
   const primary = tweaks?.primary || '#1E4C9A';
   const primaryDark = tweaks?.primaryDark || '#0F2E5F';
@@ -32,22 +34,28 @@ const OnboardingAssessment = ({
   const activeScales = Array.isArray(scales) && scales.length > 0 ? scales : SCALES;
   const activeQuestionCount = activeScales.reduce((total, scale) => total + (scale.items?.length || 0), 0);
   const progressKey = `onb-step-${companyName || 'default'}`;
+  const allowedSteps = new Set(['welcome', 'consent', 'basic', 'scale', 'complete', 'report']);
 
-  // step: 'welcome' | 'consent' | 'basic' | 'scale' | 'complete' | 'report'
-  const [step, setStep] = React.useState(() => {
-    try {
-      if (typeof window === 'undefined') return 'welcome';
-      return localStorage.getItem(progressKey) || 'welcome';
-    } catch {
-      return 'welcome';
-    }
-  });
-  const [scaleIdx, setScaleIdx] = React.useState(0); // 0-4 五个量表
+  // 服务端与首屏客户端统一从 welcome 开始，避免 localStorage 造成 hydration 报错
+  const [step, setStep] = React.useState('welcome');
+  const [scaleIdx, setScaleIdx] = React.useState(0);
   const [answers, setAnswers] = React.useState({});
+  const [progressReady, setProgressReady] = React.useState(false);
 
   React.useEffect(() => {
+    try {
+      const saved = localStorage.getItem(progressKey);
+      if (saved && allowedSteps.has(saved)) {
+        setStep(saved);
+      }
+    } catch {}
+    setProgressReady(true);
+  }, [progressKey]);
+
+  React.useEffect(() => {
+    if (!progressReady) return;
     try { localStorage.setItem(progressKey, step); } catch {}
-  }, [progressKey, step]);
+  }, [progressKey, step, progressReady]);
 
   const goto = (s) => { setStep(s); window.scrollTo({ top: 0, behavior: 'smooth' }); };
 
@@ -70,7 +78,15 @@ const OnboardingAssessment = ({
       <main className="gxa-onb-main" style={{ maxWidth: 1120, margin: '0 auto', padding: '40px 40px 120px' }}>
         {step === 'welcome' && <StepWelcome assessmentCount={activeScales.length} primary={primary} primaryDark={primaryDark} accent={accent} companyName={companyName} slogan={slogan} onNext={() => goto('consent')}/>}
         {step === 'consent' && <StepConsent primary={primary} primaryDark={primaryDark} accent={accent} companyName={companyName} onNext={() => goto('basic')} onBack={() => goto('welcome')}/>}
-        {step === 'basic' && <StepBasic primary={primary} primaryDark={primaryDark} onNext={() => { setScaleIdx(0); goto('scale'); }} onBack={() => goto('consent')}/>}
+        {step === 'basic' && (
+          <StepBasic
+            primary={primary}
+            primaryDark={primaryDark}
+            visibleFields={employeeInfoFields}
+            onNext={() => { setScaleIdx(0); goto('scale'); }}
+            onBack={() => goto('consent')}
+          />
+        )}
         {step === 'scale' && <StepScale scales={activeScales} primary={primary} primaryDark={primaryDark} scaleIdx={scaleIdx} setScaleIdx={setScaleIdx} onComplete={() => goto('complete')} onBack={() => goto('basic')}/>}
         {step === 'complete' && <StepComplete primary={primary} primaryDark={primaryDark} accent={accent} onNext={() => goto('report')}/>}
         {step === 'report' && <StepReport assessmentCount={activeScales.length} questionCount={activeQuestionCount} primary={primary} primaryDark={primaryDark} accent={accent} warm={warm} companyName={companyName} siteName={siteName} homeHref={homeHref}/>}
@@ -328,7 +344,22 @@ const StepConsent = ({ primary, primaryDark, accent, companyName, onNext, onBack
 };
 
 // ==================== Step 3: 基础信息 ====================
-const StepBasic = ({ primary, primaryDark, onNext, onBack }) => {
+const DEFAULT_REQUIRED_FIELDS = ['empNo', 'name', 'gender', 'age', 'dept', 'post', 'category', 'workLoc'];
+const DEFAULT_VISIBLE_FIELDS = [
+  'empNo', 'name', 'gender', 'age', 'edu', 'joinDate',
+  'dept', 'post', 'category', 'workLoc',
+  'livingStatus', 'hasFamily',
+];
+
+const StepBasic = ({ primary, primaryDark, onNext, onBack, visibleFields }) => {
+  const shown = Array.isArray(visibleFields) && visibleFields.length > 0
+    ? DEFAULT_VISIBLE_FIELDS.filter((id) => visibleFields.includes(id))
+    : DEFAULT_VISIBLE_FIELDS;
+  const show = (id) => shown.includes(id);
+  const showPersonal = ['empNo', 'name', 'gender', 'age', 'edu', 'joinDate'].some(show);
+  const showJob = ['dept', 'post', 'category', 'workLoc'].some(show);
+  const showLife = ['livingStatus', 'hasFamily'].some(show);
+
   const [form, setForm] = React.useState({
     empNo: '', name: '', gender: '', age: '', edu: '',
     dept: '', post: '', category: '',
@@ -337,7 +368,7 @@ const StepBasic = ({ primary, primaryDark, onNext, onBack }) => {
   });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  const required = ['empNo', 'name', 'gender', 'age', 'dept', 'post', 'category', 'workLoc'];
+  const required = DEFAULT_REQUIRED_FIELDS.filter((id) => show(id));
   const isValid = required.every(k => form[k]);
 
   return (
@@ -350,61 +381,96 @@ const StepBasic = ({ primary, primaryDark, onNext, onBack }) => {
       />
 
       <div style={{ background: '#fff', borderRadius: 8, padding: 40, marginTop: 32, boxShadow: '0 2px 20px rgba(15,46,95,.04)' }}>
-        {/* 个人信息 */}
-        <FormGroupTitle primary={primary} icon="edit">个人信息</FormGroupTitle>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-          <FormField label="工号" required>
-            <input type="text" placeholder="例如 CSCEC-3B-20260901" value={form.empNo} onChange={e => set('empNo', e.target.value)} style={fieldStyle}/>
-          </FormField>
-          <FormField label="姓名" required>
-            <input type="text" placeholder="请输入真实姓名" value={form.name} onChange={e => set('name', e.target.value)} style={fieldStyle}/>
-          </FormField>
-          <FormField label="性别" required>
-            <SegmentedControl options={['男', '女', '不愿透露']} value={form.gender} onChange={v => set('gender', v)} primary={primary}/>
-          </FormField>
-          <FormField label="年龄" required>
-            <SegmentedControl options={['≤22', '23-28', '29-35', '36-45', '46+']} value={form.age} onChange={v => set('age', v)} primary={primary}/>
-          </FormField>
-          <FormField label="学历">
-            <Select value={form.edu} onChange={v => set('edu', v)} options={['大专', '本科', '硕士', '博士', '其他']}/>
-          </FormField>
-          <FormField label="入职日期">
-            <input type="date" value={form.joinDate} onChange={e => set('joinDate', e.target.value)} style={fieldStyle}/>
-          </FormField>
-        </div>
+        {showPersonal && (
+          <>
+            <FormGroupTitle primary={primary} icon="edit">个人信息</FormGroupTitle>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              {show('empNo') && (
+                <FormField label="工号" required={required.includes('empNo')}>
+                  <input type="text" placeholder="例如 CSCEC-3B-20260901" value={form.empNo} onChange={e => set('empNo', e.target.value)} style={fieldStyle}/>
+                </FormField>
+              )}
+              {show('name') && (
+                <FormField label="姓名" required={required.includes('name')}>
+                  <input type="text" placeholder="请输入真实姓名" value={form.name} onChange={e => set('name', e.target.value)} style={fieldStyle}/>
+                </FormField>
+              )}
+              {show('gender') && (
+                <FormField label="性别" required={required.includes('gender')}>
+                  <SegmentedControl options={['男', '女', '不愿透露']} value={form.gender} onChange={v => set('gender', v)} primary={primary}/>
+                </FormField>
+              )}
+              {show('age') && (
+                <FormField label="年龄" required={required.includes('age')}>
+                  <SegmentedControl options={['≤22', '23-28', '29-35', '36-45', '46+']} value={form.age} onChange={v => set('age', v)} primary={primary}/>
+                </FormField>
+              )}
+              {show('edu') && (
+                <FormField label="学历">
+                  <Select value={form.edu} onChange={v => set('edu', v)} options={['大专', '本科', '硕士', '博士', '其他']}/>
+                </FormField>
+              )}
+              {show('joinDate') && (
+                <FormField label="入职日期">
+                  <input type="date" value={form.joinDate} onChange={e => set('joinDate', e.target.value)} style={fieldStyle}/>
+                </FormField>
+              )}
+            </div>
+          </>
+        )}
 
-        {/* 岗位信息 */}
-        <FormGroupTitle primary={primary} icon="building" style={{ marginTop: 32 }}>岗位信息</FormGroupTitle>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-          <FormField label="所属部门" required>
-            <input type="text" placeholder="例如 人力资源部 / 产品研发部" value={form.dept} onChange={e => set('dept', e.target.value)} style={fieldStyle}/>
-          </FormField>
-          <FormField label="岗位" required>
-            <input type="text" placeholder="例如 产品经理 / 行政专员" value={form.post} onChange={e => set('post', e.target.value)} style={fieldStyle}/>
-          </FormField>
-          <FormField label="岗位类别" required>
-            <SegmentedControl options={['一线业务', '项目管理', '职能支持', '技术研发']} value={form.category} onChange={v => set('category', v)} primary={primary}/>
-          </FormField>
-          <FormField label="工作地" required>
-            <SegmentedControl options={['办公现场', '公司本部', '远程办公']} value={form.workLoc} onChange={v => set('workLoc', v)} primary={primary}/>
-          </FormField>
-        </div>
+        {showJob && (
+          <>
+            <FormGroupTitle primary={primary} icon="building" style={{ marginTop: showPersonal ? 32 : 0 }}>岗位信息</FormGroupTitle>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              {show('dept') && (
+                <FormField label="所属部门" required={required.includes('dept')}>
+                  <input type="text" placeholder="例如 人力资源部 / 产品研发部" value={form.dept} onChange={e => set('dept', e.target.value)} style={fieldStyle}/>
+                </FormField>
+              )}
+              {show('post') && (
+                <FormField label="岗位" required={required.includes('post')}>
+                  <input type="text" placeholder="例如 产品经理 / 行政专员" value={form.post} onChange={e => set('post', e.target.value)} style={fieldStyle}/>
+                </FormField>
+              )}
+              {show('category') && (
+                <FormField label="岗位类别" required={required.includes('category')}>
+                  <SegmentedControl options={['一线业务', '项目管理', '职能支持', '技术研发']} value={form.category} onChange={v => set('category', v)} primary={primary}/>
+                </FormField>
+              )}
+              {show('workLoc') && (
+                <FormField label="工作地" required={required.includes('workLoc')}>
+                  <SegmentedControl options={['办公现场', '公司本部', '远程办公']} value={form.workLoc} onChange={v => set('workLoc', v)} primary={primary}/>
+                </FormField>
+              )}
+            </div>
+          </>
+        )}
 
-        {/* 生活信息（可选） */}
-        <FormGroupTitle primary={primary} icon="heart" style={{ marginTop: 32 }}>生活情况 <span style={{ fontSize: 11, color: '#8B96A8', fontWeight: 400, marginLeft: 8 }}>选填 · 用于识别支持系统</span></FormGroupTitle>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-          <FormField label="居住状况">
-            <SegmentedControl options={['与家人同住', '独居', '单位宿舍', '合租']} value={form.livingStatus} onChange={v => set('livingStatus', v)} primary={primary}/>
-          </FormField>
-          <FormField label="是否与家人异地">
-            <SegmentedControl options={['同城', '异地', '暂无家人']} value={form.hasFamily} onChange={v => set('hasFamily', v)} primary={primary}/>
-          </FormField>
-        </div>
+        {showLife && (
+          <>
+            <FormGroupTitle primary={primary} icon="heart" style={{ marginTop: (showPersonal || showJob) ? 32 : 0 }}>
+              生活情况 <span style={{ fontSize: 11, color: '#8B96A8', fontWeight: 400, marginLeft: 8 }}>选填 · 用于识别支持系统</span>
+            </FormGroupTitle>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              {show('livingStatus') && (
+                <FormField label="居住状况">
+                  <SegmentedControl options={['与家人同住', '独居', '单位宿舍', '合租']} value={form.livingStatus} onChange={v => set('livingStatus', v)} primary={primary}/>
+                </FormField>
+              )}
+              {show('hasFamily') && (
+                <FormField label="是否与家人异地">
+                  <SegmentedControl options={['同城', '异地', '暂无家人']} value={form.hasFamily} onChange={v => set('hasFamily', v)} primary={primary}/>
+                </FormField>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       <StepActions onBack={onBack} onNext={onNext} nextDisabled={!isValid} primary={primary} nextLabel="进入量表作答 →"/>
 
-      {!isValid && (
+      {!isValid && required.length > 0 && (
         <div style={{ textAlign: 'center', marginTop: 12, fontSize: 12, color: '#8B96A8' }}>
           请完成所有带 * 的必填项
         </div>
@@ -506,26 +572,40 @@ const SCALES = [
 ];
 
 const StepScale = ({ scales, primary, primaryDark, scaleIdx, setScaleIdx, onComplete, onBack }) => {
-  const scale = scales[scaleIdx];
+  const safeIdx = Math.min(Math.max(scaleIdx, 0), Math.max(scales.length - 1, 0));
+  const scale = scales[safeIdx];
   const [answers, setAnswers] = React.useState({});
   const answered = Object.keys(answers).length;
-  const isComplete = answered >= scale.demoTotal;
+  const demoTotal = Math.max(Number(scale?.demoTotal) || 0, 1);
+  const isComplete = answered >= demoTotal;
 
   const setAns = (i, v) => setAnswers(a => ({ ...a, [i]: v }));
 
-  React.useEffect(() => { setAnswers({}); }, [scaleIdx]);
+  React.useEffect(() => {
+    if (safeIdx !== scaleIdx) setScaleIdx(safeIdx);
+  }, [safeIdx, scaleIdx, setScaleIdx]);
+
+  React.useEffect(() => { setAnswers({}); }, [safeIdx]);
+
+  if (!scale) {
+    return (
+      <div style={{ maxWidth: 900, margin: '0 auto', padding: 40, textAlign: 'center', color: '#8B96A8' }}>
+        暂无可用量表，请返回上一页或联系管理员。
+      </div>
+    );
+  }
 
   const nextScale = () => {
-    if (scaleIdx < scales.length - 1) {
-      setScaleIdx(scaleIdx + 1);
+    if (safeIdx < scales.length - 1) {
+      setScaleIdx(safeIdx + 1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
       onComplete();
     }
   };
   const prevScale = () => {
-    if (scaleIdx > 0) {
-      setScaleIdx(scaleIdx - 1);
+    if (safeIdx > 0) {
+      setScaleIdx(safeIdx - 1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
       onBack();
@@ -537,15 +617,15 @@ const StepScale = ({ scales, primary, primaryDark, scaleIdx, setScaleIdx, onComp
       {/* 量表切换指示 */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
         {scales.map((s, i) => (
-          <div key={s.id} style={{
+          <div key={s.id || i} style={{
             flex: 1, height: 4, borderRadius: 2,
-            background: i < scaleIdx ? primary : (i === scaleIdx ? `linear-gradient(90deg, ${primary} ${(answered / scale.demoTotal) * 100}%, #E8ECF3 ${(answered / scale.demoTotal) * 100}%)` : '#E8ECF3'),
+            background: i < safeIdx ? primary : (i === safeIdx ? `linear-gradient(90deg, ${primary} ${(answered / demoTotal) * 100}%, #E8ECF3 ${(answered / demoTotal) * 100}%)` : '#E8ECF3'),
           }}/>
         ))}
       </div>
 
       <StepIntro
-        eyebrow={`第 3 步 · 量表 ${scaleIdx + 1} / ${scales.length}`}
+        eyebrow={`第 3 步 · 量表 ${safeIdx + 1} / ${scales.length}`}
         title={scale.name}
         desc={`${scale.subtitle} · 共 ${scale.total} 题 · 约 ${scale.dur}`}
         primary={primary}
@@ -557,8 +637,8 @@ const StepScale = ({ scales, primary, primaryDark, scaleIdx, setScaleIdx, onComp
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {scale.items.map((item, i) => (
-            <div key={i} style={{ padding: '20px 20px 24px', background: '#FBFAF7', borderRadius: 6 }}>
+          {(scale.items || []).map((item, i) => (
+            <div key={item?.id || i} style={{ padding: '20px 20px 24px', background: '#FBFAF7', borderRadius: 6 }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 16 }}>
                 <div style={{ width: 26, height: 26, borderRadius: '50%', background: primary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
                   {i + 1}
@@ -573,8 +653,8 @@ const StepScale = ({ scales, primary, primaryDark, scaleIdx, setScaleIdx, onComp
               </div>
 
               {scale.scale === 'dynamic' ? (
-                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(item.options.length, 5)}, 1fr)`, gap: 8, paddingLeft: 38 }}>
-                  {item.options.map((option, oi) => (
+                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min((item.options || []).length || 1, 5)}, 1fr)`, gap: 8, paddingLeft: 38 }}>
+                  {(item.options || []).map((option, oi) => (
                     <button key={option.id || oi} onClick={() => setAns(i, option.id || oi)} style={{
                       padding: '12px 8px', textAlign: 'center',
                       background: answers[i] === (option.id || oi) ? primary : '#fff',
@@ -636,7 +716,7 @@ const StepScale = ({ scales, primary, primaryDark, scaleIdx, setScaleIdx, onComp
 
         <div style={{ marginTop: 24, padding: '12px 16px', background: `${primary}08`, borderRadius: 4, fontSize: 12, color: '#4A5A78', display: 'flex', alignItems: 'center', gap: 8 }}>
           <Icon name="check" size={14} color={primary}/>
-          进度自动保存 · 已答 {answered} / {scale.demoTotal} 题
+          进度自动保存 · 已答 {answered} / {demoTotal} 题
         </div>
       </div>
 
@@ -645,8 +725,8 @@ const StepScale = ({ scales, primary, primaryDark, scaleIdx, setScaleIdx, onComp
         onNext={nextScale}
         nextDisabled={!isComplete}
         primary={primary}
-        backLabel={scaleIdx === 0 ? '返回基础信息' : `上一个量表`}
-        nextLabel={scaleIdx === scales.length - 1 ? '完成所有量表 →' : `下一个量表 →`}
+        backLabel={safeIdx === 0 ? '返回基础信息' : `上一个量表`}
+        nextLabel={safeIdx === scales.length - 1 ? '完成所有量表 →' : `下一个量表 →`}
       />
     </div>
   );

@@ -15,8 +15,8 @@
   --color-text-muted: #4a5a78;
   --color-text-faint: #8b96a8;
   --color-border-1: #e8ecf3;
-  --font-sans: var(--font-noto-sans), "Noto Sans SC", "PingFang SC", -apple-system, system-ui, sans-serif;
-  --font-serif: var(--font-noto-serif), "Noto Serif SC", serif;
+  --font-sans: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+  --font-serif: "Songti SC", "Noto Serif SC", "STSong", "SimSun", serif;
 }
 
 * {

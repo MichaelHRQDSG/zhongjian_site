@@ -23,6 +23,7 @@ export default async function EnterpriseOnboardingPage({
       slogan={payload.slogan}
       homeHref={`/${slug}`}
       scales={toOnboardingScales(payload)}
+      employeeInfoFields={payload.employeeInfoFields}
     />
   );
 }
