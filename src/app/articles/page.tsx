@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { ArticlesIndexPage } from '@/components/articles/ArticlesIndexPage';
 import { fetchDefaultBranding } from '@/lib/enterprise-assessments';
+import { resolveEnterpriseNav } from '@/lib/enterprise-context';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,7 +13,18 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default async function ArticlesPage() {
+export default async function ArticlesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const branding = await fetchDefaultBranding();
-  return <ArticlesIndexPage siteName={branding.siteName} homeHref="/" />;
+  const nav = resolveEnterpriseNav(await searchParams);
+  return (
+    <ArticlesIndexPage
+      siteName={branding.siteName}
+      homeHref={nav.homeHref}
+      enterpriseSlug={nav.enterpriseSlug}
+    />
+  );
 }

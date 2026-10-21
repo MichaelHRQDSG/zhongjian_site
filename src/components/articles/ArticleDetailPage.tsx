@@ -3,18 +3,23 @@
 import Link from 'next/link';
 import { Icon } from '@/components/shared/data';
 import type { Article } from '@/lib/articles';
+import { withEnterpriseQuery } from '@/lib/enterprise-context';
 import { tokens } from '@/lib/tokens';
 
 export function ArticleDetailPage({
   article,
   related = [],
   homeHref = '/',
+  listHref = '/articles',
   siteName = '心安 EAP',
+  enterpriseSlug = '',
 }: {
   article: Article;
   related?: Article[];
   homeHref?: string;
+  listHref?: string;
   siteName?: string;
+  enterpriseSlug?: string;
 }) {
   const primary = tokens.primary;
 
@@ -22,7 +27,7 @@ export function ArticleDetailPage({
     <div style={{ minHeight: '100vh', background: '#fff', color: '#1A2846', fontFamily: '"Noto Sans SC", "PingFang SC", system-ui, sans-serif' }}>
       <header style={{ background: '#fff', borderBottom: '1px solid #E8ECF3', position: 'sticky', top: 0, zIndex: 20 }}>
         <div style={{ maxWidth: 800, margin: '0 auto', padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-          <Link href="/articles" style={{ display: 'inline-flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: primary, fontWeight: 600, fontSize: 15 }}>
+          <Link href={listHref} style={{ display: 'inline-flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: primary, fontWeight: 600, fontSize: 15 }}>
             <span style={{ width: 28, height: 28, borderRadius: 6, background: `${primary}12`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', transform: 'rotate(180deg)' }}>
               <Icon name="arrow" size={14} />
             </span>
@@ -79,7 +84,7 @@ export function ArticleDetailPage({
               {related.map((item) => (
                 <Link
                   key={item.slug}
-                  href={`/articles/${item.slug}`}
+                  href={withEnterpriseQuery(`/articles/${item.slug}`, enterpriseSlug)}
                   style={{
                     display: 'block',
                     padding: '14px 16px',

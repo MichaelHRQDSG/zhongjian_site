@@ -1,3 +1,5 @@
+import { resolveApiBaseUrl } from "@/lib/backend-env";
+
 export interface SiteHeroSlide {
   imageUrl: string;
   title: string;
@@ -79,12 +81,7 @@ export function resolveEmployeeInfoFields(payload?: { employeeInfoFields?: strin
   return DEFAULT_EMPLOYEE_INFO_FIELD_IDS.filter((id) => selected.has(id));
 }
 
-const API_BASE_URL = (
-  process.env.ASSESSMENT_API_BASE_URL
-  || process.env.MINI_PRODUCTION_API_BASE_URL
-  || process.env.NEXT_PUBLIC_API_BASE_URL
-  || "http://127.0.0.1:8000"
-).replace(/\/$/, "");
+const API_BASE_URL = resolveApiBaseUrl({ preferAssessment: true });
 
 const FALLBACK_HERO_SLIDES: SiteHeroSlide[] = [
   {

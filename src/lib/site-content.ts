@@ -1,11 +1,8 @@
 /** 与小程序站点文案对齐的公开内容拉取 */
 
-const API_BASE_URL = (
-  process.env.ASSESSMENT_API_BASE_URL
-  || process.env.MINI_PRODUCTION_API_BASE_URL
-  || process.env.NEXT_PUBLIC_API_BASE_URL
-  || "http://127.0.0.1:8000"
-).replace(/\/$/, "");
+import { resolveApiBaseUrl } from "@/lib/backend-env";
+
+const API_BASE_URL = resolveApiBaseUrl({ preferAssessment: true });
 
 export interface SitePageContent {
   title: string;

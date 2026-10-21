@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { CounselorsIndexPage } from '@/components/counselors/CounselorsIndexPage';
 import { getCounselorProfilesForList } from '@/lib/counselor-profiles';
 import { fetchDefaultBranding } from '@/lib/enterprise-assessments';
+import { resolveEnterpriseNav } from '@/lib/enterprise-context';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,17 +14,23 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default async function CounselorsPage() {
+export default async function CounselorsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const [branding, counselors] = await Promise.all([
     fetchDefaultBranding(),
     getCounselorProfilesForList(),
   ]);
+  const nav = resolveEnterpriseNav(await searchParams);
   return (
     <CounselorsIndexPage
       counselors={counselors}
       siteName={branding.siteName}
-      homeHref="/"
-      contactHref="/contact"
+      homeHref={nav.homeHref}
+      contactHref={nav.link('/contact')}
+      enterpriseSlug={nav.enterpriseSlug}
     />
   );
 }

@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { CounselorDetailPage } from '@/components/counselors/CounselorDetailPage';
 import { getCounselorBySlug, getMockCounselorProfiles } from '@/lib/counselor-profiles';
 import { fetchDefaultBranding } from '@/lib/enterprise-assessments';
+import { resolveEnterpriseNav } from '@/lib/enterprise-context';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,8 +27,10 @@ export async function generateMetadata({
 
 export default async function CounselorSlugPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { slug } = await params;
   const [counselor, branding] = await Promise.all([
@@ -35,14 +38,15 @@ export default async function CounselorSlugPage({
     fetchDefaultBranding(),
   ]);
   if (!counselor) notFound();
+  const nav = resolveEnterpriseNav(await searchParams);
 
   return (
     <CounselorDetailPage
       counselor={counselor}
       siteName={branding.siteName}
-      homeHref="/"
-      listHref="/counselors"
-      contactHref="/contact"
+      homeHref={nav.homeHref}
+      listHref={nav.link('/counselors')}
+      contactHref={nav.link('/contact')}
     />
   );
 }

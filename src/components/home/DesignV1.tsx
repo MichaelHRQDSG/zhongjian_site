@@ -11,6 +11,11 @@ import type { ThemeTweaks } from '@/lib/tokens';
 import type { SiteBranding } from '@/lib/enterprise-assessments';
 import { MOCK_COUNSELORS, type CounselorCard } from '@/lib/counselors';
 import { getCounselorSlug } from '@/lib/counselor-profiles';
+import {
+  enterpriseSlugFromHomeHref,
+  withEnterpriseQuery,
+} from '@/lib/enterprise-context';
+import { SiteBeian } from '@/components/shared/SiteBeian';
 
 // 方案一：稳重经典 —— 深蓝主导
 // 特点：顶部深色导航、大幅数据展示、卡片式网格、庄重的排版
@@ -51,6 +56,11 @@ const DesignV1 = ({
   const counselorList = counselors != null ? counselors : MOCK_COUNSELORS;
   const companyName = (brand.companyName || '').trim();
   const onboardingEntryLabel = (brand.onboardingEntryLabel || '').trim() || '新员工入职测评';
+  const enterpriseSlug = enterpriseSlugFromHomeHref(homeHref);
+  const siteLink = React.useCallback(
+    (href: string) => withEnterpriseQuery(href, enterpriseSlug),
+    [enterpriseSlug],
+  );
   const navItems = NAV_ITEMS.map((item) => (
     item.href === '/onboarding' ? { ...item, label: onboardingEntryLabel } : item
   ));
@@ -67,8 +77,16 @@ const DesignV1 = ({
     return () => clearInterval(t);
   }, [heroScenes.length]);
 
+  React.useEffect(() => {
+    try {
+      if (enterpriseSlug) {
+        sessionStorage.setItem('gxa-enterprise-slug', enterpriseSlug);
+      }
+    } catch {}
+  }, [enterpriseSlug]);
+
   return (
-    <div style={{ background: '#FFFFFF', color: '#1A2846', fontFamily: '"Noto Sans SC", "PingFang SC", system-ui, sans-serif' }}>
+    <div className="gxa-home" style={{ background: '#FFFFFF', color: '#1A2846', fontFamily: '"Noto Sans SC", "PingFang SC", system-ui, sans-serif', minHeight: '100vh', overflow: 'visible' }}>
 
       {/* ==================== 顶部通知条 ==================== */}
       <div style={{ background: primaryDark, color: '#fff', fontSize: 13, padding: '10px 0' }}>
@@ -86,16 +104,16 @@ const DesignV1 = ({
           <a href={homeHref} style={{ display: 'flex', alignItems: 'center', gap: 14, textDecoration: 'none', color: 'inherit' }}>
             <img src={brand.logoUrl} alt={brand.siteName} style={{ height: 48, width: 48, borderRadius: 6, objectFit: 'cover' }}/>
             <div>
-              <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: 2, color: primary, fontFamily: '"Noto Serif SC", serif' }}>{brand.siteName}</div>
+              <div className="gxa-onb-brand-title" style={{ fontSize: 20, fontWeight: 700, letterSpacing: 2, color: primary, fontFamily: '"Noto Serif SC", serif' }}>{brand.siteName}</div>
               {companyName ? (
-                <div style={{ fontSize: 11, color: '#4A5A78', letterSpacing: 1, marginTop: 2 }}>{companyName}</div>
+                <div className="gxa-onb-brand-sub" style={{ fontSize: 11, color: '#4A5A78', letterSpacing: 1, marginTop: 2 }}>{companyName}</div>
               ) : null}
             </div>
           </a>
 
           <nav className="gxa-nav-desktop" style={{ display: 'flex', alignItems: 'center', gap: 32 }}>
             {navItems.map(item => (
-              <a key={item.label} href={item.href === '/onboarding' ? onboardingHref : item.href} style={{
+              <a key={item.label} href={item.href === '/onboarding' ? onboardingHref : (item.href.startsWith('#') ? siteLink(item.href) : siteLink(item.href))} style={{
                 color: '#1A2846', textDecoration: 'none',
                 fontSize: 15, fontWeight: 500,
                 display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -117,12 +135,13 @@ const DesignV1 = ({
               <a href={onboardingHref} style={{ background: 'transparent', border: '1px solid #D0D6E0', color: '#1A2846', padding: '10px 18px', borderRadius: 4, fontSize: 14, cursor: 'pointer', textDecoration: 'none' }}>
                 心理测评
               </a>
-              <a href="#consultation" style={{ background: primary, border: 'none', color: '#fff', padding: '10px 22px', borderRadius: 4, fontSize: 14, cursor: 'pointer', fontWeight: 500, textDecoration: 'none' }}>
+              <a href={siteLink('#consultation')} style={{ background: primary, border: 'none', color: '#fff', padding: '10px 22px', borderRadius: 4, fontSize: 14, cursor: 'pointer', fontWeight: 500, textDecoration: 'none' }}>
                 预约咨询
               </a>
             </div>
             <MobileNav
               siteName={brand.siteName}
+              homeHref={homeHref}
               onboardingHref={onboardingHref}
               onboardingEntryLabel={onboardingEntryLabel}
             />
@@ -153,17 +172,17 @@ const DesignV1 = ({
               我们都在这里，以专业与尊重陪伴你走过每一程。
             </p>
 
-            <div style={{ display: 'flex', gap: 16, marginTop: 44 }}>
-              <a href="#consultation" style={{ background: primary, color: '#fff', border: 'none', padding: '16px 32px', fontSize: 15, borderRadius: 4, cursor: 'pointer', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
+            <div className="gxa-hero-actions" style={{ display: 'flex', gap: 16, marginTop: 44, flexWrap: 'wrap' }}>
+              <a href={siteLink('#consultation')} style={{ background: primary, color: '#fff', border: 'none', padding: '16px 32px', fontSize: 15, borderRadius: 4, cursor: 'pointer', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
                 预约心理咨询 <Icon name="arrow" size={16} />
               </a>
-              <a href={onboardingHref} style={{ background: '#fff', color: primary, border: `1.5px solid ${primary}`, padding: '16px 32px', fontSize: 15, borderRadius: 4, cursor: 'pointer', fontWeight: 500, textDecoration: 'none' }}>
+              <a href={onboardingHref} style={{ background: '#fff', color: primary, border: `1.5px solid ${primary}`, padding: '16px 32px', fontSize: 15, borderRadius: 4, cursor: 'pointer', fontWeight: 500, textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
                 {onboardingEntryLabel}
               </a>
             </div>
 
             {/* 了解 EAP 服务横幅 → 二级介绍页 */}
-            <a href="/eap-services" style={{
+            <a href={siteLink('/eap-services')} style={{
               display: 'flex', alignItems: 'center', gap: 20,
               marginTop: 40, padding: '20px 24px',
               background: '#fff',
@@ -175,7 +194,7 @@ const DesignV1 = ({
               position: 'relative',
               overflow: 'hidden',
               transition: 'all .3s',
-            }} className="onboarding-banner">
+            }} className="onboarding-banner gxa-onboarding-banner">
               <div style={{
                 position: 'absolute', top: -30, right: -30,
                 width: 120, height: 120, borderRadius: '50%',
@@ -206,14 +225,14 @@ const DesignV1 = ({
             </a>
 
             {/* 信任标记 */}
-            <div style={{ marginTop: 32, paddingTop: 28, borderTop: '1px solid #E0D5C4', display: 'flex', gap: 40 }}>
+            <div className="gxa-hero-trust" style={{ marginTop: 32, paddingTop: 28, borderTop: '1px solid #E0D5C4', display: 'flex', gap: 40, flexWrap: 'wrap' }}>
               {[
                 { icon: 'shield', text: '严格保密' },
                 { icon: 'check', text: '专业资质' },
                 { icon: 'clock', text: '全天候响应' },
               ].map(item => (
                 <div key={item.text} style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#4A5A78', fontSize: 14 }}>
-                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: `${primary}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: primary }}>
+                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: `${primary}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: primary, flexShrink: 0 }}>
                     <Icon name={item.icon} size={18}/>
                   </div>
                   {item.text}
@@ -381,11 +400,11 @@ const DesignV1 = ({
                   <span style={{ display: 'inline-block', width: 4, height: 18, background: primary, verticalAlign: 'middle', marginRight: 12, transform: 'translateY(-1px)' }}/>
                   心理图文
                 </h3>
-                <a href="/articles" style={{ fontSize: 12, color: primary, textDecoration: 'none' }}>更多 →</a>
+                <a href={siteLink('/articles')} style={{ fontSize: 12, color: primary, textDecoration: 'none' }}>更多 →</a>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {ARTICLES.map((a, i) => (
-                  <a key={a.slug || i} href={`/articles/${a.slug}`} style={{ display: 'flex', gap: 16, textDecoration: 'none', color: 'inherit', padding: '14px 8px', borderRadius: 4, transition: 'background .2s', borderBottom: i < ARTICLES.length - 1 ? '1px solid #F0EBE0' : 'none' }} className="article-row">
+                  <a key={a.slug || i} href={siteLink(`/articles/${a.slug}`)} style={{ display: 'flex', gap: 16, textDecoration: 'none', color: 'inherit', padding: '14px 8px', borderRadius: 4, transition: 'background .2s', borderBottom: i < ARTICLES.length - 1 ? '1px solid #F0EBE0' : 'none' }} className="article-row">
                     <div style={{ width: 100, height: 70, flexShrink: 0, borderRadius: 4, overflow: 'hidden' }}>
                       <img src={a.img} alt={a.title} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}/>
                     </div>
@@ -410,7 +429,7 @@ const DesignV1 = ({
                   <span style={{ display: 'inline-block', width: 4, height: 18, background: '#fff', verticalAlign: 'middle', marginRight: 12, transform: 'translateY(-1px)', opacity: .5 }}/>
                   心理音画
                 </h3>
-                <a href="/audios" style={{ fontSize: 12, color: '#fff', textDecoration: 'none', opacity: .8 }}>更多 →</a>
+                <a href={siteLink('/audios')} style={{ fontSize: 12, color: '#fff', textDecoration: 'none', opacity: .8 }}>更多 →</a>
               </div>
               <AudioPlayerList audios={AUDIOS} primary={primary}/>
             </div>
@@ -429,7 +448,7 @@ const DesignV1 = ({
           />
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 20 }}>
-            <a href="/counselors" style={{ fontSize: 14, color: primary, textDecoration: 'none', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <a href={siteLink('/counselors')} style={{ fontSize: 14, color: primary, textDecoration: 'none', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               了解更多 <Icon name="arrow" size={14} />
             </a>
           </div>
@@ -437,7 +456,7 @@ const DesignV1 = ({
           {/* 咨询师团队 —— 卡片横排（模拟数据或 production 真实数据） */}
           <div className="gxa-counselors" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20, marginTop: 24 }}>
             {counselorList.map((c, i) => (
-              <a key={`${c.name}-${i}`} href={`/counselors/${getCounselorSlug(c.name)}`} style={{
+              <a key={`${c.name}-${i}`} href={siteLink(`/counselors/${getCounselorSlug(c.name)}`)} style={{
                 background: '#fff', border: '1px solid #E8ECF3', padding: 28, borderRadius: 6,
                 textAlign: 'center', transition: 'all .3s', textDecoration: 'none', color: 'inherit', display: 'block',
               }} className="counselor-card">
@@ -570,6 +589,7 @@ const SectionTitle = ({ eyebrow, title, desc, primary, align = 'center' }) => (
 const Footer = ({ branding, onboardingEntryLabel, onboardingHref = '/onboarding', homeHref = '/', primary, primaryDark, accent }) => {
   const companyName = (branding.companyName || '').trim();
   const entryLabel = (onboardingEntryLabel || '').trim() || '新员工入职测评';
+  const enterpriseSlug = enterpriseSlugFromHomeHref(homeHref);
   const hashHref = (hash) => (homeHref === '/' ? `#${hash}` : `${homeHref}#${hash}`);
   const columns = [
     {
@@ -577,7 +597,6 @@ const Footer = ({ branding, onboardingEntryLabel, onboardingHref = '/onboarding'
       items: [
         { label: entryLabel, href: onboardingHref },
         { label: '心理知识库', href: hashHref('library') },
-        { label: '心理测评', href: onboardingHref },
       ],
     },
     {
@@ -589,39 +608,40 @@ const Footer = ({ branding, onboardingEntryLabel, onboardingHref = '/onboarding'
     {
       title: '关于我们',
       items: [
-        { label: '品牌介绍', href: '/about' },
-        { label: '联系我们', href: '/contact' },
+        { label: '品牌介绍', href: withEnterpriseQuery('/about', enterpriseSlug) },
+        { label: '联系我们', href: withEnterpriseQuery('/contact', enterpriseSlug) },
       ],
     },
   ];
   return (
-  <footer style={{ background: '#0A1E42', color: 'rgba(255,255,255,.7)', padding: '70px 0 30px' }}>
-    <div style={{ maxWidth: 1360, margin: '0 auto', padding: '0 40px' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr', gap: 60, paddingBottom: 50, borderBottom: '1px solid rgba(255,255,255,.1)' }}>
-        <div>
+  <footer className="gxa-site-footer" style={{ background: '#0A1E42', color: 'rgba(255,255,255,.7)', padding: '70px 0 30px' }}>
+    <div className="gxa-footer-inner" style={{ maxWidth: 1360, margin: '0 auto', padding: '0 40px' }}>
+      <div className="gxa-footer-grid" style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr', gap: 60, paddingBottom: 50, borderBottom: '1px solid rgba(255,255,255,.1)' }}>
+        <div className="gxa-footer-brand">
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
-            <img src={branding.logoUrl} alt="" style={{ height: 44, width: 44, borderRadius: 4 }}/>
-            <div>
+            <img src={branding.logoUrl} alt="" style={{ height: 44, width: 44, borderRadius: 4, flexShrink: 0, objectFit: 'cover' }}/>
+            <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 18, color: '#fff', fontWeight: 600, fontFamily: '"Noto Serif SC", serif', letterSpacing: 2 }}>{branding.siteName}</div>
               {companyName ? (
                 <div style={{ fontSize: 11, opacity: .6, marginTop: 3 }}>{companyName}</div>
               ) : null}
             </div>
           </div>
-          <p style={{ fontSize: 13, lineHeight: 2, opacity: .7 }}>
+          <p style={{ fontSize: 13, lineHeight: 2, opacity: .7, margin: 0 }}>
             专业心理测评 · 一对一咨询陪伴<br/>
             为每一位员工提供专业、保密、全天候的心理支持
           </p>
         </div>
         {columns.map(col => (
-          <div key={col.title}>
+          <div key={col.title} className="gxa-footer-col">
             <h4 style={{ color: '#fff', fontSize: 14, margin: '0 0 20px', fontWeight: 600 }}>{col.title}</h4>
             <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
               {col.items.map(item => (
                 <li key={item.label}>
                   <a
                     href={item.href}
-                    style={{ color: 'rgba(255,255,255,.65)', textDecoration: 'none', fontSize: 13 }}
+                    className="gxa-footer-link"
+                    style={{ color: 'rgba(255,255,255,.65)', textDecoration: 'none', fontSize: 13, display: 'inline-block', lineHeight: 1.5 }}
                   >
                     {item.label}
                   </a>
@@ -631,9 +651,11 @@ const Footer = ({ branding, onboardingEntryLabel, onboardingHref = '/onboarding'
           </div>
         ))}
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 30, fontSize: 12, opacity: .5 }}>
-        <div>© 2026 {companyName ? `${companyName} · ` : ''}{branding.siteName} · 版权所有</div>
-        <div>本平台由专业心理服务机构运营 · 严格遵守心理咨询行业伦理守则</div>
+      <div className="gxa-footer-bottom" style={{ paddingTop: 30 }}>
+        <div className="gxa-footer-note" style={{ textAlign: 'center', fontSize: 12, opacity: .55, lineHeight: 1.7, marginBottom: 10 }}>
+          本平台由专业心理服务机构运营 · 严格遵守心理咨询行业伦理守则
+        </div>
+        <SiteBeian />
       </div>
     </div>
   </footer>

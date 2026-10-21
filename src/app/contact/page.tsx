@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { ContactAssistantPage } from '@/components/contact/ContactAssistantPage';
 import { fetchDefaultBranding } from '@/lib/enterprise-assessments';
+import { resolveEnterpriseNav } from '@/lib/enterprise-context';
 import { FALLBACK_CONTACT_INTRO, fetchSitePageContent } from '@/lib/site-content';
 
 export const dynamic = 'force-dynamic';
@@ -16,15 +17,20 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default async function ContactPage() {
+export default async function ContactPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const [branding, intro] = await Promise.all([
     fetchDefaultBranding(),
     fetchSitePageContent('contact', FALLBACK_CONTACT_INTRO),
   ]);
+  const nav = resolveEnterpriseNav(await searchParams);
   return (
     <ContactAssistantPage
       siteName={branding.siteName}
-      homeHref="/"
+      homeHref={nav.homeHref}
       intro={intro}
     />
   );

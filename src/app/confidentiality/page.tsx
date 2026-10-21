@@ -4,6 +4,7 @@ import {
   confidentialitySections,
 } from '@/components/legal/LegalDocPage';
 import { fetchDefaultBranding } from '@/lib/enterprise-assessments';
+import { resolveEnterpriseNav } from '@/lib/enterprise-context';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,8 +16,13 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default async function ConfidentialityPage() {
+export default async function ConfidentialityPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const branding = await fetchDefaultBranding();
+  const nav = resolveEnterpriseNav(await searchParams);
   return (
     <LegalDocPage
       eyebrow="CONFIDENTIALITY"
@@ -24,7 +30,7 @@ export default async function ConfidentialityPage() {
       description="本平台以保密为服务基础，保障来访者在安全、受尊重的环境中获得心理支持。"
       sections={confidentialitySections()}
       siteName={branding.siteName}
-      homeHref="/"
+      homeHref={nav.homeHref}
     />
   );
 }

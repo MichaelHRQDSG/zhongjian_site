@@ -3,14 +3,17 @@
 import Link from 'next/link';
 import { Icon } from '@/components/shared/data';
 import { ARTICLES, type Article } from '@/lib/articles';
+import { withEnterpriseQuery } from '@/lib/enterprise-context';
 import { tokens } from '@/lib/tokens';
 
 export function ArticlesIndexPage({
   homeHref = '/',
   siteName = '心安 EAP',
+  enterpriseSlug = '',
 }: {
   homeHref?: string;
   siteName?: string;
+  enterpriseSlug?: string;
 }) {
   const primary = tokens.primary;
 
@@ -37,7 +40,7 @@ export function ArticlesIndexPage({
 
         <div style={{ marginTop: 40, display: 'flex', flexDirection: 'column', gap: 16 }}>
           {ARTICLES.map((article) => (
-            <ArticleCard key={article.slug} article={article} primary={primary} />
+            <ArticleCard key={article.slug} article={article} primary={primary} enterpriseSlug={enterpriseSlug} />
           ))}
         </div>
       </main>
@@ -45,10 +48,18 @@ export function ArticlesIndexPage({
   );
 }
 
-function ArticleCard({ article, primary }: { article: Article; primary: string }) {
+function ArticleCard({
+  article,
+  primary,
+  enterpriseSlug = '',
+}: {
+  article: Article;
+  primary: string;
+  enterpriseSlug?: string;
+}) {
   return (
     <Link
-      href={`/articles/${article.slug}`}
+      href={withEnterpriseQuery(`/articles/${article.slug}`, enterpriseSlug)}
       style={{
         display: 'grid',
         gridTemplateColumns: '180px 1fr',

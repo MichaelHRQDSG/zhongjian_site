@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { Icon } from '@/components/shared/data';
 import type { CounselorProfile } from '@/lib/counselor-profiles';
+import { withEnterpriseQuery } from '@/lib/enterprise-context';
 import { tokens } from '@/lib/tokens';
 
 export function CounselorsIndexPage({
@@ -10,11 +11,13 @@ export function CounselorsIndexPage({
   homeHref = '/',
   contactHref = '/contact',
   siteName = '心安 EAP',
+  enterpriseSlug = '',
 }: {
   counselors: CounselorProfile[];
   homeHref?: string;
   contactHref?: string;
   siteName?: string;
+  enterpriseSlug?: string;
 }) {
   const primary = tokens.primary;
   const primaryDark = tokens.primaryDark;
@@ -44,7 +47,7 @@ export function CounselorsIndexPage({
           {counselors.map((c) => (
             <Link
               key={c.slug}
-              href={`/counselors/${c.slug}`}
+              href={withEnterpriseQuery(`/counselors/${c.slug}`, enterpriseSlug)}
               style={{
                 display: 'flex', gap: 18, alignItems: 'center',
                 background: '#fff', border: '1px solid #E8ECF3', borderRadius: 8,

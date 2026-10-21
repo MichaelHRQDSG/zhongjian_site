@@ -4,13 +4,19 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Icon, NAV_ITEMS } from '@/components/shared/data';
 import { tokens } from '@/lib/tokens';
+import {
+  enterpriseSlugFromHomeHref,
+  withEnterpriseQuery,
+} from '@/lib/enterprise-context';
 
 export default function MobileNav({
   siteName = '心安 EAP',
+  homeHref = '/',
   onboardingHref = '/onboarding',
   onboardingEntryLabel = '新员工入职测评',
 }: {
   siteName?: string;
+  homeHref?: string;
   onboardingHref?: string;
   onboardingEntryLabel?: string;
 }) {
@@ -18,14 +24,36 @@ export default function MobileNav({
   const primary = tokens.primary;
   const accent = tokens.accent;
   const entryLabel = (onboardingEntryLabel || '').trim() || '新员工入职测评';
+  const enterpriseSlug = enterpriseSlugFromHomeHref(homeHref);
   const navItems = NAV_ITEMS.map((item) => (
     item.href === '/onboarding' ? { ...item, label: entryLabel } : item
   ));
+  const resolveHref = (href: string) => {
+    if (href === '/onboarding') return onboardingHref;
+    return withEnterpriseQuery(href, enterpriseSlug);
+  };
 
   useEffect(() => {
-    document.body.style.overflow = open ? 'hidden' : '';
+    if (!open) {
+      return undefined;
+    }
+    const previousOverflow = document.body.style.overflow;
+    const previousPaddingRight = document.body.style.paddingRight;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+    document.body.style.overflow = 'hidden';
+    if (scrollbarWidth > 0) {
+      document.body.style.paddingRight = `${scrollbarWidth}px`;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
     return () => {
-      document.body.style.overflow = '';
+      document.body.style.overflow = previousOverflow;
+      document.body.style.paddingRight = previousPaddingRight;
+      window.removeEventListener('keydown', onKeyDown);
     };
   }, [open]);
 
@@ -71,6 +99,7 @@ export default function MobileNav({
               right: 0,
               width: 'min(320px, 88vw)',
               height: '100%',
+              overflowY: 'auto',
               background: '#fff',
               padding: '28px 24px',
               boxShadow: '-12px 0 40px rgba(15,46,95,.18)',
@@ -96,7 +125,7 @@ export default function MobileNav({
             {navItems.map((item) => (
               <Link
                 key={item.label}
-                href={item.href === '/onboarding' ? onboardingHref : item.href}
+                href={resolveHref(item.href)}
                 onClick={() => setOpen(false)}
                 style={{
                   display: 'flex',

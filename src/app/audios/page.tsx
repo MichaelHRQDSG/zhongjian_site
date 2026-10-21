@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { AudiosIndexPage } from '@/components/audios/AudiosIndexPage';
 import { AUDIOS } from '@/lib/audios';
 import { fetchDefaultBranding } from '@/lib/enterprise-assessments';
+import { resolveEnterpriseNav } from '@/lib/enterprise-context';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,7 +14,12 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default async function AudiosPage() {
+export default async function AudiosPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const branding = await fetchDefaultBranding();
-  return <AudiosIndexPage audios={AUDIOS} siteName={branding.siteName} homeHref="/" />;
+  const nav = resolveEnterpriseNav(await searchParams);
+  return <AudiosIndexPage audios={AUDIOS} siteName={branding.siteName} homeHref={nav.homeHref} />;
 }

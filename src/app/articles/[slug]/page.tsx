@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { ArticleDetailPage } from '@/components/articles/ArticleDetailPage';
 import { ARTICLES, getArticleBySlug, getAllArticleSlugs } from '@/lib/articles';
 import { fetchDefaultBranding } from '@/lib/enterprise-assessments';
+import { resolveEnterpriseNav } from '@/lib/enterprise-context';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,8 +27,10 @@ export async function generateMetadata({
 
 export default async function ArticleSlugPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { slug } = await params;
   const article = getArticleBySlug(slug);
@@ -35,13 +38,16 @@ export default async function ArticleSlugPage({
 
   const branding = await fetchDefaultBranding();
   const related = ARTICLES.filter((item) => item.slug !== article.slug).slice(0, 3);
+  const nav = resolveEnterpriseNav(await searchParams);
 
   return (
     <ArticleDetailPage
       article={article}
       related={related}
       siteName={branding.siteName}
-      homeHref="/"
+      homeHref={nav.homeHref}
+      listHref={nav.link('/articles')}
+      enterpriseSlug={nav.enterpriseSlug}
     />
   );
 }

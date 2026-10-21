@@ -2,7 +2,7 @@ import Link from 'next/link';
 
 export default function OnboardingPage() {
   return (
-    <main className="grid min-h-screen place-items-center bg-[#F5EFE6] px-6">
+    <main className="grid min-h-screen place-items-center overflow-auto bg-[#F5EFE6] px-6 py-10">
       <section className="max-w-lg rounded-2xl bg-white p-10 text-center shadow-sm">
         <h1 className="text-2xl font-semibold text-[#0F2E5F]">企业专属测评</h1>
         <p className="mt-4 leading-7 text-[#4A5A78]">

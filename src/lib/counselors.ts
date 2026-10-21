@@ -1,14 +1,14 @@
 /**
- * 首页 / 列表咨询师数据：可用环境变量切换「模拟数据 / mini-production 真实数据」。
+ * 首页 / 列表咨询师数据：可用环境变量切换「模拟数据 / 真实数据」。
  *
- * USE_REAL_COUNSELORS=true  → 请求 MINI_PRODUCTION_API_BASE_URL 的公开咨询师列表
+ * USE_REAL_COUNSELORS=true  → 按 BACKEND_ENV 代称请求对应后端公开咨询师列表
  * USE_REAL_COUNSELORS=false → 使用下方 MOCK_COUNSELORS（默认）
  *
  * 真实模式下失败时返回空列表，不再回退模拟咨询师。
  */
 
 import { unstable_noStore as noStore } from 'next/cache';
-
+import { resolveApiBaseUrl, resolvePublicBaseUrl } from '@/lib/backend-env';
 export type CounselorCard = {
   name: string;
   title: string;
@@ -89,7 +89,7 @@ function absoluteMediaUrl(path: unknown, apiBase: string): string | undefined {
   const origin = apiBase.replace(/\/$/, '');
   // 本机 API 时头像仍走公网静态域名，避免浏览器访问 127.0.0.1
   const publicOrigin =
-    process.env.MINI_PRODUCTION_PUBLIC_BASE_URL?.replace(/\/$/, '') ||
+    resolvePublicBaseUrl() ||
     (origin.includes('127.0.0.1') || origin.includes('localhost')
       ? 'https://eap.ji-psy.com'
       : origin);
@@ -154,10 +154,7 @@ export async function fetchCounselors(
     return mockResult();
   }
 
-  const apiBase = (
-    process.env.MINI_PRODUCTION_API_BASE_URL ||
-    'http://127.0.0.1:28000'
-  ).replace(/\/$/, '');
+  const apiBase = resolveApiBaseUrl({ preferAssessment: false });
   const limit =
     options.limit ??
     parseLimit(process.env.COUNSELORS_FETCH_LIMIT, 4, 100);
