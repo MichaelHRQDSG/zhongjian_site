@@ -75,15 +75,20 @@ export default function EapServicesPage({
   homeHref = '/',
   onboardingHref = '/onboarding',
   siteName = '心安 EAP',
+  hideConsultation = false,
 }: {
   homeHref?: string;
   onboardingHref?: string;
   siteName?: string;
+  hideConsultation?: boolean;
 }) {
   const primary = tokens.primary;
   const primaryDark = tokens.primaryDark;
   const accent = tokens.accent;
   const warm = tokens.warm;
+  const visibleServices = hideConsultation
+    ? SERVICES.filter((service) => service.id !== 'consultation')
+    : SERVICES;
 
   return (
     <div style={{ background: '#FFFFFF', color: '#1A2846', fontFamily: '"Noto Sans SC", "PingFang SC", system-ui, sans-serif', minHeight: '100vh' }}>
@@ -155,7 +160,7 @@ export default function EapServicesPage({
           </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            {SERVICES.map((service, index) => (
+            {visibleServices.map((service, index) => (
               <article
                 key={service.id}
                 id={service.id}
@@ -226,7 +231,9 @@ export default function EapServicesPage({
         <div style={{ maxWidth: 860, margin: '0 auto', textAlign: 'center' }}>
           <h2 style={{ ...headingStyle, textAlign: 'center' }}>准备好了，可以从这里开始</h2>
           <p style={{ ...bodyStyle, marginTop: 14, textAlign: 'center' }}>
-            无论是建立心理基线，还是预约一次倾谈，我们都在这里。
+            {hideConsultation
+              ? '可以从心理测评开始，我们都在这里。'
+              : '无论是建立心理基线，还是预约一次倾谈，我们都在这里。'}
           </p>
           <div style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap', marginTop: 32 }}>
             <Link
@@ -238,6 +245,7 @@ export default function EapServicesPage({
             >
               开始心理测评 <Icon name="arrow" size={16} />
             </Link>
+            {!hideConsultation && (
             <Link
               href={`${homeHref}#consultation`}
               style={{
@@ -247,6 +255,7 @@ export default function EapServicesPage({
             >
               预约心理咨询
             </Link>
+            )}
           </div>
           <div style={{ marginTop: 28, fontSize: 13, color: '#4A5A78' }}>
             24 小时心理热线：<a href="tel:4008806666" style={{ color: primary, fontWeight: 600, textDecoration: 'none' }}>400-880-6666</a>

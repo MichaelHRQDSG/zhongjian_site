@@ -47,6 +47,7 @@ const OnboardingAssessment = ({
   slug,
   apiBaseUrl = '',
   employeeInfoFields,
+  customEmployeeInfoFields,
 }: {
   tweaks?: ThemeTweaks;
   scales?: unknown[];
@@ -58,6 +59,7 @@ const OnboardingAssessment = ({
   slug?: string;
   apiBaseUrl?: string;
   employeeInfoFields?: string[];
+  customEmployeeInfoFields?: Array<{ id: string; label: string }>;
 }) => {
   const primary = tweaks?.primary || '#1E4C9A';
   const primaryDark = tweaks?.primaryDark || '#0F2E5F';
@@ -255,6 +257,7 @@ const OnboardingAssessment = ({
             primary={primary}
             primaryDark={primaryDark}
             visibleFields={employeeInfoFields}
+            customFields={customEmployeeInfoFields}
             form={basicForm}
             setForm={setBasicForm}
             onNext={() => { setScaleIdx(0); goto('scale'); }}
@@ -595,7 +598,7 @@ const DEFAULT_VISIBLE_FIELDS = [
   'livingStatus', 'hasFamily',
 ];
 
-const StepBasic = ({ primary, primaryDark, onNext, onBack, visibleFields, form, setForm }) => {
+const StepBasic = ({ primary, primaryDark, onNext, onBack, visibleFields, customFields, form, setForm }) => {
   const [consentChecked, setConsentChecked] = React.useState(false);
   const [consentOpen, setConsentOpen] = React.useState(false);
   const shown = Array.isArray(visibleFields) && visibleFields.length > 0
@@ -605,6 +608,10 @@ const StepBasic = ({ primary, primaryDark, onNext, onBack, visibleFields, form, 
   const showPersonal = ['empNo', 'name', 'gender', 'age', 'edu', 'joinDate'].some(show);
   const showJob = ['dept', 'post', 'category', 'workLoc'].some(show);
   const showLife = ['livingStatus', 'hasFamily'].some(show);
+  const customList = Array.isArray(customFields) ? customFields : [];
+  const shownCustom = Array.isArray(visibleFields)
+    ? customList.filter((field) => field?.id && visibleFields.includes(field.id))
+    : [];
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -704,6 +711,27 @@ const StepBasic = ({ primary, primaryDark, onNext, onBack, visibleFields, form, 
                   <SegmentedControl options={['同城', '异地', '暂无家人']} value={form.hasFamily} onChange={v => set('hasFamily', v)} primary={primary}/>
                 </FormField>
               )}
+            </div>
+          </>
+        )}
+
+        {shownCustom.length > 0 && (
+          <>
+            <FormGroupTitle primary={primary} icon="edit" style={{ marginTop: (showPersonal || showJob || showLife) ? 32 : 0 }}>
+              自定义字段
+            </FormGroupTitle>
+            <div className="gxa-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              {shownCustom.map((field) => (
+                <FormField key={field.id} label={field.label}>
+                  <input
+                    type="text"
+                    placeholder={`请输入${field.label}`}
+                    value={form[field.id] || ''}
+                    onChange={e => set(field.id, e.target.value)}
+                    style={fieldStyle}
+                  />
+                </FormField>
+              ))}
             </div>
           </>
         )}

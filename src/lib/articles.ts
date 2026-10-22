@@ -1,3 +1,5 @@
+import { resolveApiBaseUrl } from "@/lib/backend-env";
+
 export type Article = {
   slug: string;
   title: string;
@@ -207,4 +209,39 @@ export function getArticleBySlug(slug: string) {
 
 export function getAllArticleSlugs() {
   return ARTICLES.map((article) => article.slug);
+}
+
+export function articlesFromApi(list: unknown): Article[] | null {
+  if (!Array.isArray(list)) return null;
+  return list.map((item) => {
+    const source = item && typeof item === "object" ? item as Record<string, unknown> : {};
+    const body = String(source.body || "").trim();
+    const paragraphs = body.split(/\n\s*\n/).map((part) => part.trim()).filter(Boolean);
+    const imageUrl = String(source.imageUrl || "").trim();
+    const apiBase = resolveApiBaseUrl({ preferAssessment: true }).replace(/\/$/, "");
+    const img = !imageUrl
+      ? "/assets/article-night.jpg"
+      : /^https?:/i.test(imageUrl) || imageUrl.startsWith("data:")
+        ? imageUrl
+        : imageUrl.startsWith("/static/")
+          ? `${apiBase}${imageUrl}`
+          : imageUrl.startsWith("/")
+            ? imageUrl
+            : `/${imageUrl}`;
+    const tags = Array.isArray(source.tags)
+      ? source.tags.map((tag) => String(tag || "").trim()).filter(Boolean)
+      : [];
+    return {
+      slug: String(source.id || source.slug || ""),
+      title: String(source.title || "").trim(),
+      excerpt: String(source.excerpt || paragraphs[0] || "").trim(),
+      tags,
+      duration: String(source.duration || "").trim(),
+      cover: "",
+      img: img,
+      publishedAt: String(source.publishedAt || ""),
+      author: String(source.author || "EAP 心理服务团队"),
+      content: paragraphs.length ? paragraphs : (body ? [body] : []),
+    };
+  }).filter((article) => article.slug && article.title);
 }

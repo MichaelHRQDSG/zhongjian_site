@@ -14,20 +14,24 @@ export default function MobileNav({
   homeHref = '/',
   onboardingHref = '/onboarding',
   onboardingEntryLabel = '新员工入职测评',
+  hideConsultation = false,
 }: {
   siteName?: string;
   homeHref?: string;
   onboardingHref?: string;
   onboardingEntryLabel?: string;
+  hideConsultation?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const primary = tokens.primary;
   const accent = tokens.accent;
   const entryLabel = (onboardingEntryLabel || '').trim() || '新员工入职测评';
   const enterpriseSlug = enterpriseSlugFromHomeHref(homeHref);
-  const navItems = NAV_ITEMS.map((item) => (
-    item.href === '/onboarding' ? { ...item, label: entryLabel } : item
-  ));
+  const navItems = NAV_ITEMS
+    .filter((item) => !(hideConsultation && item.href === '#consultation'))
+    .map((item) => (
+      item.href === '/onboarding' ? { ...item, label: entryLabel } : item
+    ));
   const resolveHref = (href: string) => {
     if (href === '/onboarding') return onboardingHref;
     return withEnterpriseQuery(href, enterpriseSlug);

@@ -27,6 +27,7 @@ export default async function EnterpriseOnboardingPage({
       apiBaseUrl={getAssessmentApiBaseUrl()}
       scales={toOnboardingScales(payload)}
       employeeInfoFields={payload.employeeInfoFields}
+      customEmployeeInfoFields={payload.customEmployeeInfoFields}
     />
   );
 }

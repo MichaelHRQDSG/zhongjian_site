@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import EapServicesPage from '@/components/eap/EapServicesPage';
-import { fetchDefaultBranding } from '@/lib/enterprise-assessments';
+import { fetchDefaultBranding, fetchEnterpriseAssessments } from '@/lib/enterprise-assessments';
 import { resolveEnterpriseNav } from '@/lib/enterprise-context';
 
 export const dynamic = 'force-dynamic';
@@ -20,11 +20,15 @@ export default async function EapServicesRoutePage({
 }) {
   const branding = await fetchDefaultBranding();
   const nav = resolveEnterpriseNav(await searchParams);
+  const enterprise = nav.enterpriseSlug
+    ? await fetchEnterpriseAssessments(nav.enterpriseSlug)
+    : undefined;
   return (
     <EapServicesPage
       siteName={branding.siteName}
       homeHref={nav.homeHref}
       onboardingHref={nav.onboardingHref}
+      hideConsultation={Boolean(enterprise?.hideConsultation)}
     />
   );
 }

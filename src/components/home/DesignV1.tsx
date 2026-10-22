@@ -6,6 +6,7 @@ import {
   EAP_MODULES, STATS, ARTICLES, AUDIOS, NAV_ITEMS,
   Icon, CitySkyline,
 } from '@/components/shared/data';
+import type { Article } from '@/lib/articles';
 import MobileNav from '@/components/layout/MobileNav';
 import type { ThemeTweaks } from '@/lib/tokens';
 import type { SiteBranding } from '@/lib/enterprise-assessments';
@@ -39,12 +40,14 @@ const DesignV1 = ({
   homeHref = '/',
   onboardingHref = '/onboarding',
   counselors,
+  articles,
 }: {
   tweaks?: ThemeTweaks;
   branding?: SiteBranding | null;
   homeHref?: string;
   onboardingHref?: string;
   counselors?: CounselorCard[];
+  articles?: Article[];
 }) => {
   const [heroSlide, setHeroSlide] = React.useState(0);
   const primary = tweaks?.primary || '#1E4C9A';
@@ -56,14 +59,19 @@ const DesignV1 = ({
   const counselorList = counselors != null ? counselors : MOCK_COUNSELORS;
   const companyName = (brand.companyName || '').trim();
   const onboardingEntryLabel = (brand.onboardingEntryLabel || '').trim() || '新员工入职测评';
+  const hideConsultation = Boolean(brand.hideConsultation);
   const enterpriseSlug = enterpriseSlugFromHomeHref(homeHref);
   const siteLink = React.useCallback(
     (href: string) => withEnterpriseQuery(href, enterpriseSlug),
     [enterpriseSlug],
   );
-  const navItems = NAV_ITEMS.map((item) => (
-    item.href === '/onboarding' ? { ...item, label: onboardingEntryLabel } : item
-  ));
+  const navItems = NAV_ITEMS
+    .filter((item) => !(hideConsultation && item.href === '#consultation'))
+    .map((item) => (
+      item.href === '/onboarding' ? { ...item, label: onboardingEntryLabel } : item
+    ));
+  const serviceModules = EAP_MODULES.filter((item) => !(hideConsultation && item.id === 'consultation'));
+  const homeArticles = (articles ?? ARTICLES).slice(0, 3);
   const heroScenes = (brand.heroSlides?.length ? brand.heroSlides : DEFAULT_BRANDING_FALLBACK.heroSlides)
     .map((slide) => ({
       img: slide.imageUrl,
@@ -135,15 +143,18 @@ const DesignV1 = ({
               <a href={onboardingHref} style={{ background: 'transparent', border: '1px solid #D0D6E0', color: '#1A2846', padding: '10px 18px', borderRadius: 4, fontSize: 14, cursor: 'pointer', textDecoration: 'none' }}>
                 心理测评
               </a>
-              <a href={siteLink('#consultation')} style={{ background: primary, border: 'none', color: '#fff', padding: '10px 22px', borderRadius: 4, fontSize: 14, cursor: 'pointer', fontWeight: 500, textDecoration: 'none' }}>
-                预约咨询
-              </a>
+              {!hideConsultation && (
+                <a href={siteLink('#consultation')} style={{ background: primary, border: 'none', color: '#fff', padding: '10px 22px', borderRadius: 4, fontSize: 14, cursor: 'pointer', fontWeight: 500, textDecoration: 'none' }}>
+                  预约咨询
+                </a>
+              )}
             </div>
             <MobileNav
               siteName={brand.siteName}
               homeHref={homeHref}
               onboardingHref={onboardingHref}
               onboardingEntryLabel={onboardingEntryLabel}
+              hideConsultation={hideConsultation}
             />
           </div>
         </div>
@@ -173,12 +184,14 @@ const DesignV1 = ({
             </p>
 
             <div className="gxa-hero-actions" style={{ display: 'flex', gap: 16, marginTop: 44, flexWrap: 'wrap' }}>
-              <a href={siteLink('#consultation')} style={{ background: primary, color: '#fff', border: 'none', padding: '16px 32px', fontSize: 15, borderRadius: 4, cursor: 'pointer', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
-                预约心理咨询 <Icon name="arrow" size={16} />
-              </a>
               <a href={onboardingHref} style={{ background: '#fff', color: primary, border: `1.5px solid ${primary}`, padding: '16px 32px', fontSize: 15, borderRadius: 4, cursor: 'pointer', fontWeight: 500, textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
                 {onboardingEntryLabel}
               </a>
+              {!hideConsultation && (
+                <a href={siteLink('#consultation')} style={{ background: primary, color: '#fff', border: 'none', padding: '16px 32px', fontSize: 15, borderRadius: 4, cursor: 'pointer', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
+                  预约心理咨询 <Icon name="arrow" size={16} />
+                </a>
+              )}
             </div>
 
             {/* 了解 EAP 服务横幅 → 二级介绍页 */}
@@ -216,7 +229,9 @@ const DesignV1 = ({
                   了解 EAP 服务
                 </div>
                 <div style={{ fontSize: 13, color: '#4A5A78', marginTop: 4 }}>
-                  入职测评 · 心理知识库 · 预约咨询 —— 三个入口陪你走过每一段路
+                  {hideConsultation
+                    ? '入职测评 · 心理知识库 —— 陪你走过每一段路'
+                    : '入职测评 · 心理知识库 · 预约咨询 —— 三个入口陪你走过每一段路'}
                 </div>
               </div>
               <div style={{ color: primary, display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 500, position: 'relative', flexShrink: 0 }}>
@@ -302,12 +317,14 @@ const DesignV1 = ({
           <SectionTitle
             eyebrow="核心服务"
             title="陪你走过每一段路"
-            desc="从入职建档、日常陪伴到专业咨询 —— 三个入口，陪你走过每一段路"
+            desc={hideConsultation
+              ? '从入职建档到日常陪伴 —— 陪你走过每一段路'
+              : '从入职建档、日常陪伴到专业咨询 —— 三个入口，陪你走过每一段路'}
             primary={primary}
           />
 
           <div className="gxa-services" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20, marginTop: 64 }}>
-            {EAP_MODULES.map(m => {
+            {serviceModules.map(m => {
               const isNew = m.badge === 'NEW';
               const href = m.id === 'onboarding' ? onboardingHref : `#${m.id}`;
               return (
@@ -403,7 +420,7 @@ const DesignV1 = ({
                 <a href={siteLink('/articles')} style={{ fontSize: 12, color: primary, textDecoration: 'none' }}>更多 →</a>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {ARTICLES.map((a, i) => (
+                {homeArticles.map((a, i) => (
                   <a key={a.slug || i} href={siteLink(`/articles/${a.slug}`)} style={{ display: 'flex', gap: 16, textDecoration: 'none', color: 'inherit', padding: '14px 8px', borderRadius: 4, transition: 'background .2s', borderBottom: i < ARTICLES.length - 1 ? '1px solid #F0EBE0' : 'none' }} className="article-row">
                     <div style={{ width: 100, height: 70, flexShrink: 0, borderRadius: 4, overflow: 'hidden' }}>
                       <img src={a.img} alt={a.title} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}/>
@@ -438,6 +455,7 @@ const DesignV1 = ({
       </section>
 
       {/* ==================== 预约咨询 · 咨询师团队 ==================== */}
+      {!hideConsultation && (
       <section id="consultation" style={{ padding: '110px 0', background: '#fff' }}>
         <div style={{ maxWidth: 1360, margin: '0 auto', padding: '0 40px' }}>
           <SectionTitle
@@ -522,6 +540,7 @@ const DesignV1 = ({
           </div>
         </div>
       </section>
+      )}
 
       {/* ==================== 我们的理念 ==================== */}
       <section style={{ padding: '120px 0', background: '#fff', textAlign: 'center' }}>
@@ -545,6 +564,7 @@ const DesignV1 = ({
         onboardingEntryLabel={onboardingEntryLabel}
         onboardingHref={onboardingHref}
         homeHref={homeHref}
+        hideConsultation={hideConsultation}
         primary={primary}
         primaryDark={primaryDark}
         accent={accent}
@@ -586,7 +606,7 @@ const SectionTitle = ({ eyebrow, title, desc, primary, align = 'center' }) => (
 );
 
 // 页脚组件
-const Footer = ({ branding, onboardingEntryLabel, onboardingHref = '/onboarding', homeHref = '/', primary, primaryDark, accent }) => {
+const Footer = ({ branding, onboardingEntryLabel, onboardingHref = '/onboarding', homeHref = '/', hideConsultation = false, primary, primaryDark, accent }) => {
   const companyName = (branding.companyName || '').trim();
   const entryLabel = (onboardingEntryLabel || '').trim() || '新员工入职测评';
   const enterpriseSlug = enterpriseSlugFromHomeHref(homeHref);
@@ -599,12 +619,12 @@ const Footer = ({ branding, onboardingEntryLabel, onboardingHref = '/onboarding'
         { label: '心理知识库', href: hashHref('library') },
       ],
     },
-    {
+    ...(!hideConsultation ? [{
       title: '专业支持',
       items: [
         { label: '预约咨询', href: hashHref('consultation') },
       ],
-    },
+    }] : []),
     {
       title: '关于我们',
       items: [

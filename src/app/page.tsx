@@ -1,5 +1,6 @@
 import DesignV1 from '@/components/home/DesignV1';
-import { fetchDefaultBranding } from '@/lib/enterprise-assessments';
+import { fetchDefaultBranding, fetchPublicArticles } from '@/lib/enterprise-assessments';
+import { articlesFromApi, ARTICLES } from '@/lib/articles';
 import { getCounselorsForHome } from '@/lib/counselors';
 import type { Metadata } from 'next';
 
@@ -16,14 +17,16 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function HomePage() {
-  const [branding, counselors] = await Promise.all([
+  const [branding, counselors, articlePayload] = await Promise.all([
     fetchDefaultBranding(),
     getCounselorsForHome(),
+    fetchPublicArticles(),
   ]);
 
   return (
     <DesignV1
       branding={branding}
+      articles={articlesFromApi(articlePayload) ?? ARTICLES}
       counselors={counselors.items}
       homeHref="/"
       onboardingHref="/onboarding"

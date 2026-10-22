@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 
 import DesignV1 from "@/components/home/DesignV1";
 import { fetchEnterpriseAssessments } from "@/lib/enterprise-assessments";
+import { articlesFromApi, ARTICLES } from "@/lib/articles";
 import { getCounselorsForHome } from "@/lib/counselors";
 
 export async function generateMetadata({
@@ -32,6 +33,7 @@ export default async function EnterpriseHomePage({
   return (
     <DesignV1
       branding={branding}
+      articles={articlesFromApi(branding.articles) ?? ARTICLES}
       counselors={counselors.items}
       homeHref={`/${slug}`}
       onboardingHref={`/${slug}/onboarding`}

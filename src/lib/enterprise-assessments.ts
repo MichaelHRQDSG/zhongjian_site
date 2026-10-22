@@ -15,12 +15,22 @@ export interface SiteBranding {
   onboardingEntryLabel: string;
   /** EAP 首页右侧三张轮播 */
   heroSlides: SiteHeroSlide[];
+  /** 仅定制化企业：为 true 时隐藏预约心理咨询及相关图片 */
+  hideConsultation?: boolean;
+}
+
+export interface CustomEmployeeInfoField {
+  id: string;
+  label: string;
 }
 
 export interface EnterpriseAssessmentPayload extends SiteBranding {
   slug: string;
   /** 企业链接需展示的员工基本信息字段 ID；未返回时前端按全部字段处理 */
   employeeInfoFields?: string[];
+  /** 仅当前企业新增的字段定义，未勾选的不会出现在 employeeInfoFields 里 */
+  customEmployeeInfoFields?: CustomEmployeeInfoField[];
+  articles?: unknown;
   assessments: Array<{
     id: string;
     version?: number;
@@ -66,19 +76,45 @@ export const DEFAULT_EMPLOYEE_INFO_FIELD_IDS = [
   "hasFamily",
 ] as const;
 
-export function resolveEmployeeInfoFields(payload?: { employeeInfoFields?: string[] | null }) {
+const CUSTOM_EMPLOYEE_INFO_FIELD_ID = /^custom-[a-f0-9]{12}$/;
+
+export function normalizeCustomEmployeeInfoFields(
+  value?: Array<{ id?: string; label?: string }> | null,
+): CustomEmployeeInfoField[] {
+  if (!Array.isArray(value)) return [];
+  const result: CustomEmployeeInfoField[] = [];
+  const seen = new Set<string>();
+  for (const raw of value) {
+    const id = String(raw?.id || "").trim().toLowerCase();
+    const label = String(raw?.label || "").trim().slice(0, 40);
+    if (!CUSTOM_EMPLOYEE_INFO_FIELD_ID.test(id) || !label || seen.has(id)) continue;
+    seen.add(id);
+    result.push({ id, label });
+    if (result.length >= 20) break;
+  }
+  return result;
+}
+
+export function resolveEmployeeInfoFields(payload?: {
+  employeeInfoFields?: string[] | null;
+  customEmployeeInfoFields?: Array<{ id?: string; label?: string }> | null;
+}) {
+  const customIds = normalizeCustomEmployeeInfoFields(payload?.customEmployeeInfoFields).map((field) => field.id);
   const raw = payload?.employeeInfoFields;
   if (!Array.isArray(raw) || raw.length === 0) {
     return [...DEFAULT_EMPLOYEE_INFO_FIELD_IDS];
   }
-  const allowed = new Set<string>(DEFAULT_EMPLOYEE_INFO_FIELD_IDS);
+  const allowed = new Set<string>([...DEFAULT_EMPLOYEE_INFO_FIELD_IDS, ...customIds]);
   const selected = new Set(
     raw.map((value) => String(value || "").trim()).filter((value) => allowed.has(value)),
   );
   if (selected.size === 0) {
     return [...DEFAULT_EMPLOYEE_INFO_FIELD_IDS];
   }
-  return DEFAULT_EMPLOYEE_INFO_FIELD_IDS.filter((id) => selected.has(id));
+  return [
+    ...DEFAULT_EMPLOYEE_INFO_FIELD_IDS.filter((id) => selected.has(id)),
+    ...customIds.filter((id) => selected.has(id)),
+  ];
 }
 
 const API_BASE_URL = resolveApiBaseUrl({ preferAssessment: true });
@@ -180,6 +216,7 @@ export async function fetchEnterpriseAssessments(slug: string) {
       ...payload,
       ...branding,
       employeeInfoFields: resolveEmployeeInfoFields(payload),
+      customEmployeeInfoFields: normalizeCustomEmployeeInfoFields(payload.customEmployeeInfoFields),
       assessments: Array.isArray(payload.assessments) ? payload.assessments : [],
     } as EnterpriseAssessmentPayload;
   } catch (error) {
@@ -201,6 +238,21 @@ export async function fetchDefaultBranding(): Promise<SiteBranding> {
     return normalizeBranding(await response.json());
   } catch {
     return FALLBACK_BRANDING;
+  }
+}
+
+/** 读取通用或某企业解析后的心理图文。请求失败返回 null，空列表表示确实没有图文。 */
+export async function fetchPublicArticles(slug?: string): Promise<unknown[] | null> {
+  try {
+    const url = slug
+      ? `${API_BASE_URL}/api/web/assessment-enterprises/${encodeURIComponent(slug)}`
+      : `${API_BASE_URL}/api/web/assessment-enterprises/default`;
+    const response = await fetch(url, { cache: "no-store" });
+    if (!response.ok) return null;
+    const payload = unwrapPayload<{ articles?: unknown }>(await response.json());
+    return Array.isArray(payload?.articles) ? payload.articles : null;
+  } catch {
+    return null;
   }
 }
 

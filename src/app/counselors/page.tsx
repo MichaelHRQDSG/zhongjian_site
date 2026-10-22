@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
 import { CounselorsIndexPage } from '@/components/counselors/CounselorsIndexPage';
 import { getCounselorProfilesForList } from '@/lib/counselor-profiles';
-import { fetchDefaultBranding } from '@/lib/enterprise-assessments';
+import { fetchDefaultBranding, fetchEnterpriseAssessments } from '@/lib/enterprise-assessments';
 import { resolveEnterpriseNav } from '@/lib/enterprise-context';
 
 export const dynamic = 'force-dynamic';
@@ -24,6 +25,10 @@ export default async function CounselorsPage({
     getCounselorProfilesForList(),
   ]);
   const nav = resolveEnterpriseNav(await searchParams);
+  if (nav.enterpriseSlug) {
+    const enterprise = await fetchEnterpriseAssessments(nav.enterpriseSlug);
+    if (enterprise?.hideConsultation) redirect(nav.homeHref);
+  }
   return (
     <CounselorsIndexPage
       counselors={counselors}

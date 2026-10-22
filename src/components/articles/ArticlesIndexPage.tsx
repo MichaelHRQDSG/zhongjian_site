@@ -7,10 +7,12 @@ import { withEnterpriseQuery } from '@/lib/enterprise-context';
 import { tokens } from '@/lib/tokens';
 
 export function ArticlesIndexPage({
+  articles = ARTICLES,
   homeHref = '/',
   siteName = '心安 EAP',
   enterpriseSlug = '',
 }: {
+  articles?: Article[];
   homeHref?: string;
   siteName?: string;
   enterpriseSlug?: string;
@@ -39,7 +41,7 @@ export function ArticlesIndexPage({
         </p>
 
         <div style={{ marginTop: 40, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {ARTICLES.map((article) => (
+          {articles.map((article) => (
             <ArticleCard key={article.slug} article={article} primary={primary} enterpriseSlug={enterpriseSlug} />
           ))}
         </div>

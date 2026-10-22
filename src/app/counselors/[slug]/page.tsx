@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { CounselorDetailPage } from '@/components/counselors/CounselorDetailPage';
 import { getCounselorBySlug, getMockCounselorProfiles } from '@/lib/counselor-profiles';
-import { fetchDefaultBranding } from '@/lib/enterprise-assessments';
+import { fetchDefaultBranding, fetchEnterpriseAssessments } from '@/lib/enterprise-assessments';
 import { resolveEnterpriseNav } from '@/lib/enterprise-context';
 
 export const dynamic = 'force-dynamic';
@@ -39,6 +39,10 @@ export default async function CounselorSlugPage({
   ]);
   if (!counselor) notFound();
   const nav = resolveEnterpriseNav(await searchParams);
+  if (nav.enterpriseSlug) {
+    const enterprise = await fetchEnterpriseAssessments(nav.enterpriseSlug);
+    if (enterprise?.hideConsultation) redirect(nav.homeHref);
+  }
 
   return (
     <CounselorDetailPage
