@@ -359,12 +359,6 @@ const OnbStepper = ({ primary, step, scaleIdx }) => {
 const OnbFooter = ({ primary, accent, companyName, siteName }) => (
   <footer className="gxa-onb-footer" style={{ background: '#0A1E42', color: 'rgba(255,255,255,.7)', padding: '30px 0', fontSize: 12 }}>
     <div className="gxa-onb-footer-inner" style={{ maxWidth: 1360, margin: '0 auto', padding: '0 40px' }}>
-      <div className="gxa-onb-footer-phone" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 20, marginBottom: 10 }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, lineHeight: 1.7 }}>
-          <Icon name="phone" size={12}/>
-          遇到问题：400-880-6666
-        </span>
-      </div>
       <SiteBeian opacity={0.85} />
     </div>
   </footer>
@@ -511,7 +505,7 @@ const ConsentDocumentBody = ({ primary }) => (
       <p style={{ margin: '0 0 12px' }}><strong>三、异常情况处理</strong><br/>若测评结果显示您可能存在严重的心理困扰或自伤自杀风险，EAP 咨询师将主动通过系统内消息联系您，此过程<strong>不会通知任何管理者</strong>。</p>
       <p style={{ margin: '0 0 12px' }}><strong>四、您的权利</strong><br/>1. 随时中止测评；<br/>2. 随时申请删除您的全部数据；<br/>3. 申请导出个人测评报告；<br/>4. 对结果解读申请免费复议咨询。</p>
       <p style={{ margin: '0 0 12px' }}><strong>五、数据保存期限</strong><br/>您的原始测评数据保存 3 年，之后自动匿名化归档。</p>
-      <p style={{ margin: 0 }}>如有疑问，请联系 EAP 服务电话 400-880-6666，或发送邮件至 privacy@eap-service.com。</p>
+      <p style={{ margin: 0 }}>如有疑问，请发送邮件至 privacy@eap-service.com。</p>
     </div>
   </>
 );
@@ -659,7 +653,7 @@ const StepBasic = ({ primary, primaryDark, onNext, onBack, visibleFields, custom
                 </FormField>
               )}
               {show('joinDate') && (
-                <FormField label="入职日期">
+                <FormField label="到岗日期">
                   <input type="date" value={form.joinDate} onChange={e => set('joinDate', e.target.value)} style={fieldStyle}/>
                 </FormField>
               )}
@@ -1149,13 +1143,12 @@ const StepComplete = ({ primary, primaryDark, accent, onNext, canProceed, error,
   );
 };
 
-function mockReportNo(employeeName) {
+function mockReportNo() {
   const now = new Date();
   const y = now.getFullYear();
   const m = String(now.getMonth() + 1).padStart(2, '0');
   const d = String(now.getDate()).padStart(2, '0');
-  const suffix = String(employeeName || 'GXA').replace(/[^\u4e00-\u9fa5A-Za-z0-9]/g, '').slice(-3) || 'GXA';
-  return `DEMO-${y}${m}${d}-${suffix}`;
+  return `DEMO-${y}${m}${d}`;
 }
 
 function mockReportTime() {
@@ -1234,7 +1227,7 @@ const StepReport = ({ scales, assessmentCount, questionCount, primary, primaryDa
   const overallScore = Math.round(dimensions.reduce((sum, item) => sum + item.score, 0) / dimensions.length);
   const overallTone = mockLevelByScore(overallScore);
   const suggestions = buildMockSuggestions(dimensions);
-  const reportNo = mockReportNo(companyName);
+  const reportNo = mockReportNo();
   const reportTime = mockReportTime();
 
   return (
@@ -1365,9 +1358,7 @@ const StepReport = ({ scales, assessmentCount, questionCount, primary, primaryDa
       {/* 保密提示 */}
       <div className="gxa-report-about" style={{ marginTop: 32, padding: '20px 24px', background: '#FBFAF7', borderRadius: 6, borderLeft: `3px solid ${primary}`, fontSize: 13, color: '#4A5A78', lineHeight: 1.8, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
         <strong style={{ color: '#0F2E5F' }}>关于本报告 · </strong>
-        本页分数、等级和建议为模拟结果，不根据本次真实作答计算。作答题目来自企业授权量表，提交记录仍按真实答卷保存。EAP 咨询师团队仅在你主动预约时才能查阅相关内容。
-        {companyName}人事、行政、你的直接上级<strong>均无权访问</strong>本报告的任何原始数据。
-        你可以随时申请导出或删除全部数据。如有疑问，请拨打 400-880-6666。
+        本页分数、等级和建议为模拟结果，不根据本次真实作答计算。
       </div>
     </div>
   );

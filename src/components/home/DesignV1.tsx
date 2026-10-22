@@ -26,7 +26,7 @@ const DEFAULT_BRANDING_FALLBACK: SiteBranding = {
   companyName: '',
   logoUrl: '/static/uploads/eap-default-logo.png',
   slogan: '专业测评，贴心陪伴',
-  onboardingEntryLabel: '新员工入职测评',
+  onboardingEntryLabel: '员工心理测评',
   heroSlides: [
     { imageUrl: '/assets/hero-site.jpg', title: '心理测评', desc: '专业量表，帮助你更好认识自己' },
     { imageUrl: '/assets/hero-office.jpg', title: '职场支持', desc: '关注工作压力与情绪健康' },
@@ -58,7 +58,7 @@ const DesignV1 = ({
   // 传入空数组时不回退 mock（真实模式拉取失败应显示空，而不是模拟咨询师）
   const counselorList = counselors != null ? counselors : MOCK_COUNSELORS;
   const companyName = (brand.companyName || '').trim();
-  const onboardingEntryLabel = (brand.onboardingEntryLabel || '').trim() || '新员工入职测评';
+  const onboardingEntryLabel = (brand.onboardingEntryLabel || '').trim() || '员工心理测评';
   const hideConsultation = Boolean(brand.hideConsultation);
   const enterpriseSlug = enterpriseSlugFromHomeHref(homeHref);
   const siteLink = React.useCallback(
@@ -178,7 +178,6 @@ const DesignV1 = ({
             </h1>
 
             <p style={{ fontSize: 17, lineHeight: 1.9, color: '#4A5A78', marginTop: 32, maxWidth: 520 }}>
-              专业心理测评量表与一对一咨询服务，全程保密。<br/>
               无论你正经历职场压力、情绪困扰，还是希望更好地认识自己，
               我们都在这里，以专业与尊重陪伴你走过每一程。
             </p>
@@ -230,8 +229,8 @@ const DesignV1 = ({
                 </div>
                 <div style={{ fontSize: 13, color: '#4A5A78', marginTop: 4 }}>
                   {hideConsultation
-                    ? '入职测评 · 心理知识库 —— 陪你走过每一段路'
-                    : '入职测评 · 心理知识库 · 预约咨询 —— 三个入口陪你走过每一段路'}
+                    ? '心理测评 · 心理知识库 —— 陪你走过每一段路'
+                    : '心理测评 · 心理知识库 · 预约咨询 —— 三个入口陪你走过每一段路'}
                 </div>
               </div>
               <div style={{ color: primary, display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 500, position: 'relative', flexShrink: 0 }}>
@@ -244,7 +243,7 @@ const DesignV1 = ({
               {[
                 { icon: 'shield', text: '严格保密' },
                 { icon: 'check', text: '专业资质' },
-                { icon: 'clock', text: '全天候响应' },
+                { icon: 'clock', text: '专业陪伴' },
               ].map(item => (
                 <div key={item.text} style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#4A5A78', fontSize: 14 }}>
                   <div style={{ width: 36, height: 36, borderRadius: '50%', background: `${primary}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: primary, flexShrink: 0 }}>
@@ -318,8 +317,8 @@ const DesignV1 = ({
             eyebrow="核心服务"
             title="陪你走过每一段路"
             desc={hideConsultation
-              ? '从入职建档到日常陪伴 —— 陪你走过每一段路'
-              : '从入职建档、日常陪伴到专业咨询 —— 三个入口，陪你走过每一段路'}
+              ? '从心理建档到日常陪伴 —— 陪你走过每一段路'
+              : '从心理建档、日常陪伴到专业咨询 —— 三个入口，陪你走过每一段路'}
             primary={primary}
           />
 
@@ -522,7 +521,7 @@ const DesignV1 = ({
                 {[
                   { n: 1, title: '选择方向', desc: '按困扰或咨询师筛选' },
                   { n: 2, title: '联系咨询助理', desc: '了解咨询过程 / 填写预约表单 / 助理推送预约订单' },
-                  { n: 3, title: '完成预约', desc: '首次入职咨询免费' },
+                  { n: 3, title: '完成预约', desc: '首次咨询免费' },
                 ].map(s => (
                   <div key={s.n} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#fff', color: primary, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600, fontFamily: '"Noto Serif SC", serif', flexShrink: 0, border: `1.5px solid ${primary}30` }}>{s.n}</div>
@@ -608,7 +607,7 @@ const SectionTitle = ({ eyebrow, title, desc, primary, align = 'center' }) => (
 // 页脚组件
 const Footer = ({ branding, onboardingEntryLabel, onboardingHref = '/onboarding', homeHref = '/', hideConsultation = false, primary, primaryDark, accent }) => {
   const companyName = (branding.companyName || '').trim();
-  const entryLabel = (onboardingEntryLabel || '').trim() || '新员工入职测评';
+  const entryLabel = (onboardingEntryLabel || '').trim() || '员工心理测评';
   const enterpriseSlug = enterpriseSlugFromHomeHref(homeHref);
   const hashHref = (hash) => (homeHref === '/' ? `#${hash}` : `${homeHref}#${hash}`);
   const columns = [
@@ -649,7 +648,7 @@ const Footer = ({ branding, onboardingEntryLabel, onboardingHref = '/onboarding'
           </div>
           <p style={{ fontSize: 13, lineHeight: 2, opacity: .7, margin: 0 }}>
             专业心理测评 · 一对一咨询陪伴<br/>
-            为每一位员工提供专业、保密、全天候的心理支持
+            为每一位员工提供专业、保密的心理支持
           </p>
         </div>
         {columns.map(col => (

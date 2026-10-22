@@ -10,7 +10,7 @@ import { getHomeAudios } from '@/lib/audios';
 // 所有方案共用此数据源
 
 const EAP_MODULES = [
-  { id: 'onboarding', title: '新员工入职测评', desc: '入职 30 天内完成心理基线建档，仅需 30 分钟', icon: 'userCheck', badge: 'NEW' },
+  { id: 'onboarding', title: '员工心理测评', desc: '完成心理建档和心理评测', icon: 'userCheck', badge: 'NEW' },
   { id: 'library', title: '心理知识库', desc: '心理图文、疗愈音频，疑惑时可以先来看看', icon: 'book' },
   { id: 'consultation', title: '预约咨询', desc: '1v1 深度陪伴，选择你信任的咨询师与时段', icon: 'calendar' },
 ];
@@ -19,7 +19,7 @@ const STATS = [
   { num: '50+', label: '合作企业覆盖' },
   { num: '12,800+', label: '累计服务员工' },
   { num: '1000+', label: '专业心理咨询师' },
-  { num: '24/7', label: '全天候热线支持' },
+  { num: '100%', label: '数据独立保密' },
 ];
 
 const QA_LIST = [
@@ -91,7 +91,7 @@ const COUNSELORS = [
 ];
 
 const NAV_ITEMS = [
-  { label: '新员工入职测评', href: '/onboarding', badge: 'NEW' },
+  { label: '员工心理测评', href: '/onboarding', badge: 'NEW' },
   { label: '心理知识库', href: '#library' },
   { label: '预约咨询', href: '#consultation' },
 ];

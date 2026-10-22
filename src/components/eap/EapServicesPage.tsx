@@ -13,7 +13,7 @@ const SERVICES = [
     summary: '用专业量表帮助你认识自己',
     points: [
       '提供标准化心理测评量表，覆盖情绪、压力、适应与社会支持等维度',
-      '新员工可通过入职测评建立个人心理基线档案',
+      '可通过心理测评建立个人心理基线档案',
       '测评结果仅用于个人了解与后续支持建议，不作为人事考核依据',
     ],
   },
@@ -37,17 +37,6 @@ const SERVICES = [
       '支持预约持证心理咨询师，进行一对一深度交流',
       '覆盖职场压力、情绪疏导、人际关系、家庭沟通等常见议题',
       '可按时间与沟通方式选择合适时段，灵活安排',
-    ],
-  },
-  {
-    id: 'hotline',
-    icon: 'phone' as const,
-    title: '24 小时心理热线',
-    summary: '紧急时刻，随时有人回应',
-    points: [
-      '提供全天候电话支持，应对突发情绪困扰',
-      '适合需要即时倾听与稳定情绪的时刻',
-      '与平台其他服务协同，必要时可引导后续预约咨询',
     ],
   },
 ];
@@ -131,7 +120,7 @@ export default function EapServicesPage({
               EAP（Employee Assistance Program，员工帮助计划）是企业为员工及其家属提供的系统性心理健康服务。它关注工作压力、情绪困扰、人际沟通、家庭关系等现实议题，帮助员工在追求职业发展的同时，也能照顾好内在状态。
             </p>
             <p style={bodyStyle}>
-              与传统「出了问题再就医」不同，EAP 更强调日常陪伴与早期支持：你可以通过心理测评了解自己，通过知识库先做自我调节，也可以在需要时预约一对一咨询或拨打热线。整套服务以尊重与保密为前提。
+              与传统「出了问题再就医」不同，EAP 更强调日常陪伴与早期支持：你可以通过心理测评了解自己，通过知识库先做自我调节，也可以在需要时预约一对一咨询。整套服务以尊重与保密为前提。
             </p>
           </div>
 
@@ -139,7 +128,7 @@ export default function EapServicesPage({
             {[
               { title: '专业', desc: '持证咨询师与标准化量表，服务流程规范可追溯' },
               { title: '保密', desc: '个人信息不进入人事档案，数据由本 EAP 平台独立保存，不向第三方提供' },
-              { title: '可及', desc: '测评、知识、咨询、热线多入口，按需选择即可' },
+              { title: '可及', desc: '测评、知识、咨询多入口，按需选择即可' },
             ].map((item) => (
               <div key={item.title} style={{ background: '#FBFAF7', border: '1px solid #E8ECF3', borderRadius: 8, padding: '24px 20px' }}>
                 <div style={{ fontFamily: '"Noto Serif SC", serif', fontSize: 22, color: primary, fontWeight: 600, letterSpacing: 1 }}>{item.title}</div>
@@ -154,9 +143,11 @@ export default function EapServicesPage({
       <section style={{ padding: '80px 24px', background: '#FBFAF7' }}>
         <div style={{ maxWidth: 860, margin: '0 auto' }}>
           <SectionEyebrow primary={primary}>EAP 服务包含哪些</SectionEyebrow>
-          <h2 style={headingStyle}>四类核心服务，覆盖从自助到求助</h2>
+          <h2 style={headingStyle}>{hideConsultation ? '两类核心服务，覆盖从自助到求助' : '三类核心服务，覆盖从自助到求助'}</h2>
           <p style={{ ...bodyStyle, marginTop: 16, marginBottom: 40 }}>
-            本平台围绕「认识自己 → 自我调节 → 专业陪伴 → 紧急支持」设计服务路径，你可以根据当下状态选择合适入口。
+            {hideConsultation
+              ? '本平台围绕「认识自己 → 自我调节」设计服务路径，你可以根据当下状态选择合适入口。'
+              : '本平台围绕「认识自己 → 自我调节 → 专业陪伴」设计服务路径，你可以根据当下状态选择合适入口。'}
           </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -256,9 +247,6 @@ export default function EapServicesPage({
               预约心理咨询
             </Link>
             )}
-          </div>
-          <div style={{ marginTop: 28, fontSize: 13, color: '#4A5A78' }}>
-            24 小时心理热线：<a href="tel:4008806666" style={{ color: primary, fontWeight: 600, textDecoration: 'none' }}>400-880-6666</a>
           </div>
         </div>
       </section>

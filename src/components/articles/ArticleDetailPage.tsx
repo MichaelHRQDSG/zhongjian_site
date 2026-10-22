@@ -73,8 +73,7 @@ export function ArticleDetailPage({
           lineHeight: 1.8,
           color: '#4A5A78',
         }}>
-          如果你正在经历类似困扰，不必独自硬扛。可返回首页预约咨询，或拨打 24 小时心理热线
-          {' '}<a href="tel:4008806666" style={{ color: primary, fontWeight: 600, textDecoration: 'none' }}>400-880-6666</a>。
+          如果你正在经历类似困扰，不必独自硬扛。可返回首页预约咨询。
         </div>
 
         {related.length > 0 && (

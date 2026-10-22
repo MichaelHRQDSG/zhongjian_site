@@ -13,7 +13,7 @@ export default function MobileNav({
   siteName = '心安 EAP',
   homeHref = '/',
   onboardingHref = '/onboarding',
-  onboardingEntryLabel = '新员工入职测评',
+  onboardingEntryLabel = '员工心理测评',
   hideConsultation = false,
 }: {
   siteName?: string;
@@ -25,7 +25,7 @@ export default function MobileNav({
   const [open, setOpen] = useState(false);
   const primary = tokens.primary;
   const accent = tokens.accent;
-  const entryLabel = (onboardingEntryLabel || '').trim() || '新员工入职测评';
+  const entryLabel = (onboardingEntryLabel || '').trim() || '员工心理测评';
   const enterpriseSlug = enterpriseSlugFromHomeHref(homeHref);
   const navItems = NAV_ITEMS
     .filter((item) => !(hideConsultation && item.href === '#consultation'))

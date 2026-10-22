@@ -11,7 +11,7 @@ export interface SiteBranding {
   siteName: string;
   logoUrl: string;
   slogan: string;
-  /** EAP 首页入职测评入口文案（导航 + 主按钮） */
+  /** EAP 首页心理测评入口文案（导航 + 主按钮） */
   onboardingEntryLabel: string;
   /** EAP 首页右侧三张轮播 */
   heroSlides: SiteHeroSlide[];
@@ -142,7 +142,7 @@ const FALLBACK_BRANDING: SiteBranding = {
   companyName: "",
   logoUrl: "/static/uploads/eap-default-logo.png",
   slogan: "专业测评，贴心陪伴",
-  onboardingEntryLabel: "新员工入职测评",
+  onboardingEntryLabel: "员工心理测评",
   heroSlides: FALLBACK_HERO_SLIDES,
 };
 
