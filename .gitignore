@@ -15,6 +15,10 @@
 
 # next.js
 /.next/
+/.next-local/
+/.next-dev/
+/.next-test/
+/.next-prod/
 /out/
 
 # production
@@ -30,8 +34,11 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files：真实环境文件不入库，仅保留模板
 .env*
+!.env.example
+config/corp-env/
+!config/corp-env/.gitkeep
 
 # vercel
 .vercel

@@ -1,0 +1,22 @@
+[Unit]
+Description=Zhongjian Sanju EAP Next.js site (广厦心安) [%i]
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/data/mini_program/EAP_project_site/zhongjian_site
+Environment=PATH=/data/mini_program/runtime/node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# %i = local | dev | test | prod
+ExecStart=/data/mini_program/EAP_project_site/zhongjian_site/scripts/corp-start.sh %i
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillMode=mixed
+StandardOutput=append:/data/mini_program/logs/zhongjian-eap/%i.out.log
+StandardError=append:/data/mini_program/logs/zhongjian-eap/%i.err.log
+
+[Install]
+WantedBy=multi-user.target

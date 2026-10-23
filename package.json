@@ -6,7 +6,9 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "corp:with": "./scripts/corp-with-env.sh",
+    "corp:start": "./scripts/corp-start.sh"
   },
   "dependencies": {
     "next": "15.1.0",

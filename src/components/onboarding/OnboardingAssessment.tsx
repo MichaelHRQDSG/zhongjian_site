@@ -461,16 +461,6 @@ const StepWelcome = ({ assessmentCount, primary, primaryDark, accent, companyNam
         <text x="-105" y="72" textAnchor="middle" fontSize="11" fill="#0F2E5F" fontWeight="600">社会支持</text>
         <text x="-105" y="-58" textAnchor="middle" fontSize="11" fill="#0F2E5F" fontWeight="600">压力承受</text>
       </svg>
-      {/* 浮标：分数示意 */}
-      <div className="gxa-onb-welcome-float gxa-onb-welcome-float-score" style={{
-        position: 'absolute', top: '10%', right: '2%',
-        background: '#fff', padding: '10px 14px', borderRadius: 6,
-        boxShadow: '0 10px 30px rgba(15,46,95,.15)',
-        fontSize: 12, color: '#4A5A78',
-      }}>
-        <div style={{ fontSize: 20, fontWeight: 700, color: primary, fontFamily: '"Noto Serif SC", serif' }}>78</div>
-        <div>你的心理健康分</div>
-      </div>
     </div>
   </div>
 );
