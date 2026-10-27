@@ -47,14 +47,6 @@ const PRIVACY_ITEMS = [
     desc: '测评与咨询数据由本 EAP 心理咨询平台独立存储与管理，与企业人事系统隔离，不会提供给无关第三方。',
   },
   {
-    title: '不进入人事档案',
-    desc: '个人咨询记录、测评原始数据不会写入人事档案，也不会用于绩效考核或晋升评价。',
-  },
-  {
-    title: '最小必要授权',
-    desc: '企业仅可查看完全脱敏后的聚合趋势数据；个人明细仅在本人额外授权后才可向指定咨询师分享。',
-  },
-  {
     title: '可随时行使权利',
     desc: '你可以申请导出个人报告。',
   },
@@ -95,43 +87,43 @@ export default function EapServicesPage({
       </header>
 
       {/* Hero */}
-      <section style={{ background: `linear-gradient(180deg, ${warm} 0%, #FBF7F0 100%)`, padding: '72px 24px 64px' }}>
+      <section style={{ background: `linear-gradient(180deg, ${warm} 0%, #FBF7F0 100%)`, padding: '40px 24px 36px' }}>
         <div style={{ maxWidth: 860, margin: '0 auto' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#fff', border: `1px solid ${primary}20`, padding: '6px 14px', borderRadius: 40, fontSize: 13, color: primary, marginBottom: 24 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#fff', border: `1px solid ${primary}20`, padding: '6px 14px', borderRadius: 40, fontSize: 12, color: primary, marginBottom: 12 }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: accent }} />
             Employee Assistance Program
           </div>
-          <h1 style={{ margin: 0, fontFamily: '"Noto Serif SC", serif', fontSize: 42, fontWeight: 700, color: '#0F2E5F', letterSpacing: 2, lineHeight: 1.3 }}>
+          <h1 className="eap-page-title" style={{ margin: 0, fontFamily: '"Noto Serif SC", serif', fontSize: 28, fontWeight: 700, color: '#0F2E5F', letterSpacing: 0.5, lineHeight: 1.3 }}>
             了解 EAP 服务
           </h1>
-          <p style={{ margin: '20px 0 0', fontSize: 16, lineHeight: 1.9, color: '#4A5A78', maxWidth: 640 }}>
+          <p style={{ margin: '12px 0 0', fontSize: 15, lineHeight: 1.75, color: '#4A5A78', maxWidth: 640 }}>
             EAP（员工帮助计划）是面向企业员工的专业心理支持体系。这里没有病人和医生，只有求助者与陪伴者——我们用测评、知识与咨询，陪你走过情绪与压力的每一程。
           </p>
         </div>
       </section>
 
       {/* 什么是 EAP */}
-      <section style={{ padding: '80px 24px', background: '#fff' }}>
+      <section style={{ padding: '40px 24px', background: '#fff' }}>
         <div style={{ maxWidth: 860, margin: '0 auto' }}>
           <SectionEyebrow primary={primary}>什么是 EAP</SectionEyebrow>
-          <h2 style={headingStyle}>专业、保密、可及的员工心理支持</h2>
-          <div style={{ marginTop: 28, display: 'grid', gap: 16 }}>
+          <h2 className="eap-section-title" style={headingStyle}>专业、保密、可及的员工心理支持</h2>
+          <div style={{ marginTop: 16, display: 'grid', gap: 12 }}>
             <p style={bodyStyle}>
-              EAP（Employee Assistance Program，员工帮助计划）是企业为员工及其家属提供的系统性心理健康服务。它关注工作压力、情绪困扰、人际沟通、家庭关系等现实议题，帮助员工在追求职业发展的同时，也能照顾好内在状态。
+              EAP（Employee Assistance Program，员工帮助计划）是企业为员工提供的系统性心理健康服务。它关注工作压力、情绪困扰、人际沟通、家庭关系等现实议题，帮助员工在追求职业发展的同时，也能照顾好内在状态。
             </p>
             <p style={bodyStyle}>
               与传统「出了问题再就医」不同，EAP 更强调日常陪伴与早期支持：你可以通过心理测评了解自己，通过知识库先做自我调节，也可以在需要时预约一对一咨询。整套服务以尊重与保密为前提。
             </p>
           </div>
 
-          <div style={{ marginTop: 36, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }} className="eap-intro-grid-3">
+          <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }} className="eap-intro-grid-3">
             {[
               { title: '专业', desc: '持证咨询师与标准化量表，服务流程规范可追溯' },
-              { title: '保密', desc: '个人信息不进入人事档案，数据由本 EAP 平台独立保存，不向第三方提供' },
+              { title: '保密', desc: '数据由本 EAP 平台独立保存，不向第三方提供' },
               { title: '可及', desc: '测评、知识、咨询多入口，按需选择即可' },
             ].map((item) => (
               <div key={item.title} style={{ background: '#FBFAF7', border: '1px solid #E8ECF3', borderRadius: 8, padding: '24px 20px' }}>
-                <div style={{ fontFamily: '"Noto Serif SC", serif', fontSize: 22, color: primary, fontWeight: 600, letterSpacing: 1 }}>{item.title}</div>
+                <div style={{ fontFamily: '"Noto Serif SC", serif', fontSize: 18, color: primary, fontWeight: 600, letterSpacing: 0.5 }}>{item.title}</div>
                 <p style={{ margin: '10px 0 0', fontSize: 14, lineHeight: 1.75, color: '#4A5A78' }}>{item.desc}</p>
               </div>
             ))}
@@ -140,11 +132,11 @@ export default function EapServicesPage({
       </section>
 
       {/* EAP 包含哪些 */}
-      <section style={{ padding: '80px 24px', background: '#FBFAF7' }}>
+      <section style={{ padding: '40px 24px', background: '#FBFAF7' }}>
         <div style={{ maxWidth: 860, margin: '0 auto' }}>
           <SectionEyebrow primary={primary}>EAP 服务包含哪些</SectionEyebrow>
-          <h2 style={headingStyle}>{hideConsultation ? '两类核心服务，覆盖从自助到求助' : '三类核心服务，覆盖从自助到求助'}</h2>
-          <p style={{ ...bodyStyle, marginTop: 16, marginBottom: 40 }}>
+          <h2 className="eap-section-title" style={headingStyle}>{hideConsultation ? '两类核心服务，覆盖从自助到求助' : '三类核心服务，覆盖从自助到求助'}</h2>
+          <p style={{ ...bodyStyle, marginTop: 10, marginBottom: 20 }}>
             {hideConsultation
               ? '本平台围绕「认识自己 → 自我调节」设计服务路径，你可以根据当下状态选择合适入口。'
               : '本平台围绕「认识自己 → 自我调节 → 专业陪伴」设计服务路径，你可以根据当下状态选择合适入口。'}
@@ -173,7 +165,7 @@ export default function EapServicesPage({
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 12, color: primary, letterSpacing: 1, fontWeight: 600 }}>0{index + 1}</span>
-                      <h3 style={{ margin: 0, fontSize: 22, fontFamily: '"Noto Serif SC", serif', color: '#0F2E5F', letterSpacing: 1 }}>{service.title}</h3>
+                      <h3 style={{ margin: 0, fontSize: 18, fontFamily: '"Noto Serif SC", serif', color: '#0F2E5F', letterSpacing: 0.5 }}>{service.title}</h3>
                     </div>
                     <p style={{ margin: '8px 0 0', fontSize: 14, color: '#4A5A78' }}>{service.summary}</p>
                     <ul style={{ margin: '18px 0 0', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -195,15 +187,15 @@ export default function EapServicesPage({
       </section>
 
       {/* 隐私保护 */}
-      <section style={{ padding: '80px 24px', background: '#fff' }}>
+      <section style={{ padding: '40px 24px', background: '#fff' }}>
         <div style={{ maxWidth: 860, margin: '0 auto' }}>
           <SectionEyebrow primary={primary}>隐私与信息保护</SectionEyebrow>
-          <h2 style={headingStyle}>你的信息会被怎样保护？</h2>
-          <p style={{ ...bodyStyle, marginTop: 16 }}>
+          <h2 className="eap-section-title" style={headingStyle}>你的信息会被怎样保护？</h2>
+          <p style={{ ...bodyStyle, marginTop: 10 }}>
             我们承诺：EAP 服务以保密为第一原则。个人求助不应成为顾虑，更不应影响你的职业发展。
           </p>
 
-          <div style={{ marginTop: 36, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }} className="eap-intro-grid-2">
+          <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }} className="eap-intro-grid-2">
             {PRIVACY_ITEMS.map((item) => (
               <div key={item.title} style={{ border: '1px solid #E8ECF3', borderRadius: 8, padding: '24px 22px', background: '#FBFAF7' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: primary, marginBottom: 12 }}>
@@ -218,10 +210,10 @@ export default function EapServicesPage({
       </section>
 
       {/* CTA */}
-      <section style={{ padding: '64px 24px 88px', background: warm }}>
+      <section style={{ padding: '36px 24px 48px', background: warm }}>
         <div style={{ maxWidth: 860, margin: '0 auto', textAlign: 'center' }}>
-          <h2 style={{ ...headingStyle, textAlign: 'center' }}>准备好了，可以从这里开始</h2>
-          <p style={{ ...bodyStyle, marginTop: 14, textAlign: 'center' }}>
+          <h2 className="eap-section-title" style={{ ...headingStyle, textAlign: 'center' }}>准备好了，可以从这里开始</h2>
+          <p style={{ ...bodyStyle, marginTop: 10, textAlign: 'center' }}>
             {hideConsultation
               ? '可以从心理测评开始，我们都在这里。'
               : '无论是建立心理基线，还是预约一次倾谈，我们都在这里。'}
@@ -253,6 +245,14 @@ export default function EapServicesPage({
 
       <style>{`
         @media (max-width: 768px) {
+          .eap-page-title {
+            font-size: 22px !important;
+            letter-spacing: 0 !important;
+          }
+          .eap-section-title {
+            font-size: 18px !important;
+            letter-spacing: 0 !important;
+          }
           .eap-intro-grid-3,
           .eap-intro-grid-2 {
             grid-template-columns: 1fr !important;
@@ -265,7 +265,7 @@ export default function EapServicesPage({
 
 function SectionEyebrow({ primary, children }: { primary: string; children: React.ReactNode }) {
   return (
-    <div style={{ fontSize: 13, color: primary, letterSpacing: 3, marginBottom: 12, fontWeight: 500 }}>
+    <div style={{ fontSize: 12, color: primary, letterSpacing: 1, marginBottom: 8, fontWeight: 500 }}>
       {children}
     </div>
   );
@@ -274,16 +274,16 @@ function SectionEyebrow({ primary, children }: { primary: string; children: Reac
 const headingStyle: React.CSSProperties = {
   margin: 0,
   fontFamily: '"Noto Serif SC", serif',
-  fontSize: 32,
+  fontSize: 24,
   fontWeight: 700,
   color: '#0F2E5F',
-  letterSpacing: 2,
+  letterSpacing: 0.5,
   lineHeight: 1.35,
 };
 
 const bodyStyle: React.CSSProperties = {
   margin: 0,
   fontSize: 15,
-  lineHeight: 1.9,
+  lineHeight: 1.75,
   color: '#4A5A78',
 };

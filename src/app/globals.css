@@ -126,6 +126,16 @@ img {
     font-size: 42px !important;
   }
 
+  .gxa-section-title {
+    font-size: 32px !important;
+    letter-spacing: 0.5px !important;
+  }
+
+  .gxa-philosophy-title {
+    font-size: 26px !important;
+    letter-spacing: 0.5px !important;
+  }
+
   .gxa-stats {
     grid-template-columns: repeat(2, 1fr) !important;
     gap: 28px !important;
@@ -271,10 +281,26 @@ img {
   }
 
   .gxa-hero-title {
-    font-size: 34px !important;
+    font-size: 28px !important;
     letter-spacing: 0 !important;
     word-break: break-word;
     overflow-wrap: anywhere;
+  }
+
+  .gxa-section-title {
+    font-size: 22px !important;
+    letter-spacing: 0 !important;
+    line-height: 1.4 !important;
+    word-break: keep-all;
+    overflow-wrap: break-word;
+  }
+
+  .gxa-philosophy-title {
+    font-size: 20px !important;
+    letter-spacing: 0 !important;
+    line-height: 1.55 !important;
+    word-break: keep-all;
+    overflow-wrap: break-word;
   }
 
   .gxa-hero-actions {
@@ -302,14 +328,37 @@ img {
     gap: 14px !important;
   }
 
+  .gxa-home > section {
+    padding-top: 52px !important;
+    padding-bottom: 52px !important;
+  }
+
+  .gxa-stats-section {
+    padding: 16px 0 !important;
+  }
+
   .gxa-stats {
     grid-template-columns: 1fr 1fr !important;
-    gap: 20px !important;
-    padding: 0 16px !important;
+    gap: 10px 8px !important;
+    padding: 0 12px !important;
   }
 
   .gxa-stats > div > div:first-child {
-    font-size: 32px !important;
+    font-size: 22px !important;
+    letter-spacing: 0 !important;
+    line-height: 1.15 !important;
+  }
+
+  .gxa-stats > div > div:last-child {
+    font-size: 11px !important;
+    margin-top: 2px !important;
+    letter-spacing: 0 !important;
+    line-height: 1.3 !important;
+  }
+
+  .gxa-services {
+    margin-top: 28px !important;
+    gap: 12px !important;
   }
 
   .gxa-services,
@@ -319,7 +368,7 @@ img {
   }
 
   .gxa-site-footer {
-    padding: 48px 0 28px !important;
+    padding: 24px 0 16px !important;
   }
 
   .gxa-footer-inner {
@@ -328,8 +377,8 @@ img {
   }
 
   .gxa-footer-grid {
-    gap: 28px !important;
-    padding-bottom: 28px !important;
+    gap: 16px !important;
+    padding-bottom: 16px !important;
   }
 
   .gxa-footer-brand {
@@ -338,11 +387,18 @@ img {
 
   .gxa-footer-brand > div:first-child {
     justify-content: center !important;
+    margin-bottom: 8px !important;
+    gap: 10px !important;
+  }
+
+  .gxa-footer-brand img {
+    height: 32px !important;
+    width: 32px !important;
   }
 
   .gxa-footer-brand p {
-    font-size: 13px !important;
-    line-height: 1.85 !important;
+    font-size: 12px !important;
+    line-height: 1.55 !important;
   }
 
   .gxa-footer-col {
@@ -350,11 +406,13 @@ img {
   }
 
   .gxa-footer-col h4 {
-    margin-bottom: 14px !important;
+    margin-bottom: 8px !important;
+    font-size: 13px !important;
   }
 
   .gxa-footer-col ul {
     align-items: center;
+    gap: 6px !important;
   }
 
   .gxa-footer-link {
@@ -371,11 +429,11 @@ img {
     flex-direction: column !important;
     align-items: center !important;
     text-align: center !important;
-    gap: 10px !important;
-    padding-top: 22px !important;
-    font-size: 12px !important;
+    gap: 6px !important;
+    padding-top: 12px !important;
+    font-size: 11px !important;
     opacity: 0.72 !important;
-    line-height: 1.75 !important;
+    line-height: 1.55 !important;
   }
 
   .gxa-footer-note {
@@ -515,6 +573,7 @@ img {
 
   .gxa-onb-footer {
     text-align: center;
+    padding: 16px 0 !important;
   }
 
   .gxa-onb-footer-inner {
@@ -851,11 +910,41 @@ img {
 
 @media (max-width: 480px) {
   .gxa-hero-title {
-    font-size: 26px !important;
+    font-size: 22px !important;
+  }
+
+  .gxa-section-title {
+    font-size: 18px !important;
+  }
+
+  .gxa-philosophy-title {
+    font-size: 17px !important;
+  }
+
+  .gxa-site-footer {
+    padding: 18px 0 12px !important;
+  }
+
+  .gxa-footer-grid {
+    gap: 12px !important;
+    padding-bottom: 12px !important;
+  }
+
+  .gxa-stats-section {
+    padding: 12px 0 !important;
   }
 
   .gxa-stats {
-    grid-template-columns: 1fr !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px 6px !important;
+  }
+
+  .gxa-stats > div > div:first-child {
+    font-size: 20px !important;
+  }
+
+  .gxa-stats > div > div:last-child {
+    font-size: 10px !important;
   }
 
   .gxa-onb-title {

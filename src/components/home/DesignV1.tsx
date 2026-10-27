@@ -96,16 +96,6 @@ const DesignV1 = ({
   return (
     <div className="gxa-home" style={{ background: '#FFFFFF', color: '#1A2846', fontFamily: '"Noto Sans SC", "PingFang SC", system-ui, sans-serif', minHeight: '100vh', overflow: 'visible' }}>
 
-      {/* ==================== 顶部通知条 ==================== */}
-      <div style={{ background: primaryDark, color: '#fff', fontSize: 13, padding: '10px 0' }}>
-        <div style={{ maxWidth: 1360, margin: '0 auto', padding: '0 40px', display: 'flex', alignItems: 'center' }} className="gxa-topbar">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: .9 }}>
-            <Icon name="shield" size={14} />
-            <span>本平台严格执行保密协议 · 一切咨询记录不进入人事档案</span>
-          </div>
-        </div>
-      </div>
-
       {/* ==================== 主导航 ==================== */}
       <header style={{ background: '#fff', borderBottom: '1px solid #E8ECF3', position: 'sticky', top: 0, zIndex: 50 }}>
         <div style={{ maxWidth: 1360, margin: '0 auto', padding: '18px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -299,7 +289,7 @@ const DesignV1 = ({
       </section>
 
       {/* ==================== 数据条 ==================== */}
-      <section style={{ background: primaryDark, color: '#fff', padding: '48px 0' }}>
+      <section className="gxa-stats-section" style={{ background: primaryDark, color: '#fff', padding: '48px 0' }}>
         <div className="gxa-stats" style={{ maxWidth: 1360, margin: '0 auto', padding: '0 40px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 40 }}>
           {STATS.map((s, i) => (
             <div key={i} style={{ textAlign: 'center', position: 'relative', paddingLeft: i > 0 ? 40 : 0, borderLeft: i > 0 ? '1px solid rgba(255,255,255,.15)' : 'none' }}>
@@ -544,7 +534,7 @@ const DesignV1 = ({
       {/* ==================== 我们的理念 ==================== */}
       <section style={{ padding: '120px 0', background: '#fff', textAlign: 'center' }}>
         <div style={{ maxWidth: 900, margin: '0 auto', padding: '0 40px' }}>
-          <h2 style={{ fontFamily: '"Noto Serif SC", serif', fontSize: 34, fontWeight: 500, lineHeight: 1.7, color: '#0F2E5F', letterSpacing: 2, margin: 0 }}>
+          <h2 className="gxa-philosophy-title" style={{ fontFamily: '"Noto Serif SC", serif', fontSize: 34, fontWeight: 500, lineHeight: 1.7, color: '#0F2E5F', letterSpacing: 2, margin: 0 }}>
             倾听内心，守护成长。<br/>
             专业测评与心理咨询，陪你走过<span style={{ color: primary }}>情绪的每一程</span>。
           </h2>
@@ -597,7 +587,7 @@ const DesignV1 = ({
 const SectionTitle = ({ eyebrow, title, desc, primary, align = 'center' }) => (
   <div style={{ textAlign: align, maxWidth: align === 'center' ? 720 : undefined, margin: align === 'center' ? '0 auto' : 0 }}>
     <div style={{ fontSize: 13, color: primary, letterSpacing: 3, marginBottom: 12, fontWeight: 500 }}>{eyebrow.toUpperCase()}</div>
-    <h2 style={{ fontFamily: '"Noto Serif SC", serif', fontSize: 40, fontWeight: 700, margin: 0, color: '#0F2E5F', letterSpacing: 2, lineHeight: 1.3 }}>
+    <h2 className="gxa-section-title" style={{ fontFamily: '"Noto Serif SC", serif', fontSize: 40, fontWeight: 700, margin: 0, color: '#0F2E5F', letterSpacing: 2, lineHeight: 1.3 }}>
       {title}
     </h2>
     {desc && <p style={{ fontSize: 15, color: '#4A5A78', lineHeight: 1.9, marginTop: 20 }}>{desc}</p>}
@@ -647,7 +637,7 @@ const Footer = ({ branding, onboardingEntryLabel, onboardingHref = '/onboarding'
             </div>
           </div>
           <p style={{ fontSize: 13, lineHeight: 2, opacity: .7, margin: 0 }}>
-            专业心理测评 · 一对一咨询陪伴<br/>
+            专业心理测评<br/>
             为每一位员工提供专业、保密的心理支持
           </p>
         </div>
