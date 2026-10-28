@@ -38,6 +38,9 @@ export interface EnterpriseAssessmentPayload extends SiteBranding {
     subtitle?: string;
     instructions?: string;
     description?: string;
+    reportIntro?: string;
+    features?: string;
+    disclaimer?: string;
     duration: number;
     questions: Array<{
       id: string;
@@ -58,6 +61,24 @@ export interface EnterpriseReportsSubmitPayload {
   visitorKey: string;
   employeeInfo: Record<string, unknown>;
   reports: EnterpriseReportSubmitItem[];
+}
+
+/** 企业站单量表提交后返回的结果摘要（后端在 reports 项中附带） */
+export interface EnterpriseSubmittedReport {
+  assessmentId: string;
+  publicId?: string;
+  assessmentTitle?: string;
+  assessmentSubtitle?: string;
+  scoringType?: string;
+  resultSummary?: string;
+  result?: Record<string, unknown> | null;
+}
+
+export interface EnterpriseReportsSubmitResult {
+  accountId?: number | string;
+  sourceLabel?: string;
+  savedCount?: number;
+  reports?: EnterpriseSubmittedReport[];
 }
 
 /** 与后台默认员工信息模板一致的字段顺序 */
@@ -259,6 +280,7 @@ export async function fetchPublicArticles(slug?: string): Promise<unknown[] | nu
 export function toOnboardingScales(payload: EnterpriseAssessmentPayload) {
   return (payload.assessments || []).map((assessment) => {
     const questions = Array.isArray(assessment.questions) ? assessment.questions : [];
+    // title 已由后端按企业 assessmentTitles 覆盖：有自定义名用自定义名，否则为量表原名
     return {
       id: assessment.id,
       version: Number(assessment.version) > 0 ? Number(assessment.version) : 1,
@@ -269,6 +291,8 @@ export function toOnboardingScales(payload: EnterpriseAssessmentPayload) {
       demoTotal: questions.length,
       scale: "dynamic" as const,
       question: assessment.instructions || "请根据你的实际情况完成以下题目",
+      reportIntro: assessment.reportIntro || assessment.features || assessment.description || "",
+      disclaimer: assessment.disclaimer || "",
       items: questions.map((question) => ({
         id: question.id,
         text: question.text,
@@ -309,5 +333,5 @@ export async function submitEnterpriseOnboardingReports(
     const detail = envelope.msg || envelope.detail || envelope.message || `提交失败（${response.status}）`;
     throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
   }
-  return unwrapPayload(raw) || raw;
+  return (unwrapPayload(raw) || raw) as EnterpriseReportsSubmitResult;
 }

@@ -8,7 +8,7 @@ import { submitEnterpriseOnboardingReports } from '@/lib/enterprise-assessments'
 import type { ThemeTweaks } from '@/lib/tokens';
 
 // 员工心理测评 · 完整流程页面
-// 步骤：欢迎 → 基础信息（含知情同意勾选）→ 量表答题 → 提交完成 → 报告预览
+// 步骤：欢迎 → 基础信息（含知情同意）→ 量表选择 → 单量表作答 → 量表结果 → 返回继续选择
 
 const EMPTY_BASIC_FORM = {
   empNo: '', name: '', gender: '', age: '', edu: '',
@@ -66,31 +66,43 @@ const OnboardingAssessment = ({
   const accent = tweaks?.accent || '#C8161D';
   const warm = tweaks?.warm || '#F5EFE6';
   const activeScales = Array.isArray(scales) && scales.length > 0 ? scales : SCALES;
-  const activeQuestionCount = activeScales.reduce((total, scale) => total + (scale.items?.length || 0), 0);
   const storageScope = slug || companyName || 'default';
   const progressKey = `onb-step-${storageScope}`;
   const answersKey = `onb-answers-${storageScope}`;
   const basicKey = `onb-basic-${storageScope}`;
   const visitorKeyStorage = `onb-visitor-${storageScope}`;
-  const allowedSteps = new Set(['welcome', 'basic', 'scale', 'complete', 'report']);
+  const completedKey = `onb-completed-${storageScope}`;
+  const resultsKey = `onb-results-${storageScope}`;
+  const allowedSteps = new Set(['welcome', 'basic', 'select', 'scale', 'scaleResult']);
 
   // 服务端与首屏客户端统一从 welcome 开始，避免 localStorage 造成 hydration 报错
   const [step, setStep] = React.useState('welcome');
-  const [scaleIdx, setScaleIdx] = React.useState(0);
+  const [activeScaleId, setActiveScaleId] = React.useState('');
   const [answersByScale, setAnswersByScale] = React.useState({});
+  const [completedScaleIds, setCompletedScaleIds] = React.useState([]);
+  const [resultsByScale, setResultsByScale] = React.useState({});
   const [basicForm, setBasicForm] = React.useState(EMPTY_BASIC_FORM);
   const [visitorKey, setVisitorKey] = React.useState('');
   const [progressReady, setProgressReady] = React.useState(false);
   const [submitError, setSubmitError] = React.useState('');
-  const [submitDone, setSubmitDone] = React.useState(false);
+  const [submitting, setSubmitting] = React.useState(false);
   const submittingRef = React.useRef(false);
+
+  const activeScale = React.useMemo(
+    () => activeScales.find((s) => s?.id === activeScaleId) || null,
+    [activeScales, activeScaleId],
+  );
+  const currentResult = resultsByScale[activeScaleId] || null;
+  const completedCount = completedScaleIds.length;
+  const allDone = activeScales.length > 0 && completedCount >= activeScales.length;
 
   React.useEffect(() => {
     try {
       let saved = localStorage.getItem(progressKey);
-      // 旧版独立「知情同意」步骤并入基础信息
+      // 兼容旧流程步骤
       if (saved === 'consent') saved = 'basic';
-      if (saved && allowedSteps.has(saved) && saved !== 'complete' && saved !== 'report') {
+      if (saved === 'complete' || saved === 'report' || saved === 'scale') saved = 'select';
+      if (saved && allowedSteps.has(saved) && saved !== 'scale' && saved !== 'scaleResult') {
         setStep(saved);
       }
       const savedAnswers = localStorage.getItem(answersKey);
@@ -105,6 +117,16 @@ const OnboardingAssessment = ({
           setBasicForm({ ...EMPTY_BASIC_FORM, ...parsed });
         }
       }
+      const savedCompleted = localStorage.getItem(completedKey);
+      if (savedCompleted) {
+        const parsed = JSON.parse(savedCompleted);
+        if (Array.isArray(parsed)) setCompletedScaleIds(parsed.map(String));
+      }
+      const savedResults = localStorage.getItem(resultsKey);
+      if (savedResults) {
+        const parsed = JSON.parse(savedResults);
+        if (parsed && typeof parsed === 'object') setResultsByScale(parsed);
+      }
       let key = localStorage.getItem(visitorKeyStorage) || '';
       if (key.length < 8) {
         key = createVisitorKey();
@@ -116,11 +138,18 @@ const OnboardingAssessment = ({
       setVisitorKey(key);
     }
     setProgressReady(true);
-  }, [progressKey, answersKey, basicKey, visitorKeyStorage]);
+  }, [progressKey, answersKey, basicKey, visitorKeyStorage, completedKey, resultsKey]);
 
   React.useEffect(() => {
     if (!progressReady) return;
-    try { localStorage.setItem(progressKey, step); } catch {}
+    try {
+      // 作答/结果页不持久化步骤，刷新回到量表选择更安全
+      if (step === 'scale' || step === 'scaleResult') {
+        localStorage.setItem(progressKey, 'select');
+      } else {
+        localStorage.setItem(progressKey, step);
+      }
+    } catch {}
   }, [progressKey, step, progressReady]);
 
   React.useEffect(() => {
@@ -132,6 +161,16 @@ const OnboardingAssessment = ({
     if (!progressReady) return;
     try { localStorage.setItem(basicKey, JSON.stringify(basicForm)); } catch {}
   }, [basicKey, basicForm, progressReady]);
+
+  React.useEffect(() => {
+    if (!progressReady) return;
+    try { localStorage.setItem(completedKey, JSON.stringify(completedScaleIds)); } catch {}
+  }, [completedKey, completedScaleIds, progressReady]);
+
+  React.useEffect(() => {
+    if (!progressReady) return;
+    try { localStorage.setItem(resultsKey, JSON.stringify(resultsByScale)); } catch {}
+  }, [resultsKey, resultsByScale, progressReady]);
 
   React.useEffect(() => {
     try {
@@ -155,82 +194,109 @@ const OnboardingAssessment = ({
     }));
   }, []);
 
-  const finishWithMockReport = React.useCallback((saved) => {
-    setSubmitDone(true);
-    submittingRef.current = false;
-    try {
-      if (saved) {
-        localStorage.removeItem(answersKey);
-        localStorage.removeItem(basicKey);
-      }
-      localStorage.setItem(progressKey, 'report');
-    } catch {}
-    goto('complete');
-  }, [answersKey, basicKey, progressKey]);
-
-  const handleScalesComplete = React.useCallback(async () => {
-    if (submittingRef.current || submitDone) {
-      goto('complete');
-      return;
-    }
-    if (!slug || !apiBaseUrl) {
-      // 演示量表（无企业 slug）直接进入模拟报告
-      setSubmitError('');
-      finishWithMockReport(false);
-      return;
-    }
-    submittingRef.current = true;
+  const openScale = React.useCallback((scaleId) => {
+    setActiveScaleId(scaleId);
     setSubmitError('');
-    goto('complete');
-    try {
-      const reports = activeScales
-        .filter((scale) => scale?.id && scale.scale === 'dynamic')
-        .map((scale) => {
-          const raw = answersByScale[scale.id] || {};
-          const answers = {};
-          (scale.items || []).forEach((item, index) => {
-            const questionId = item?.id || String(index);
-            const value = raw[questionId] ?? raw[index];
-            if (value != null && value !== '') {
-              answers[questionId] = String(value);
-            }
-          });
-          return {
-            clientSubmissionId: createSubmissionId(),
-            assessmentId: scale.id,
-            assessmentVersion: Number(scale.version) > 0 ? Number(scale.version) : 1,
-            answers,
-          };
-        })
-        .filter((item) => Object.keys(item.answers).length > 0);
+    goto('scale');
+  }, []);
 
-      if (reports.length === 0) {
-        throw new Error('没有可提交的量表答案');
+  const openScaleResult = React.useCallback((scaleId) => {
+    setActiveScaleId(scaleId);
+    setSubmitError('');
+    goto('scaleResult');
+  }, []);
+
+  const buildAnswersForScale = React.useCallback((scale) => {
+    const raw = answersByScale[scale.id] || {};
+    const answers = {};
+    (scale.items || []).forEach((item, index) => {
+      const questionId = item?.id || String(index);
+      const value = raw[questionId] ?? raw[index];
+      if (value != null && value !== '') {
+        answers[questionId] = String(value);
+      }
+    });
+    return answers;
+  }, [answersByScale]);
+
+  const markScaleCompleted = React.useCallback((scaleId, reportPayload) => {
+    setCompletedScaleIds((prev) => (prev.includes(scaleId) ? prev : [...prev, scaleId]));
+    if (reportPayload) {
+      setResultsByScale((prev) => ({ ...prev, [scaleId]: reportPayload }));
+    }
+  }, []);
+
+  const handleSingleScaleSubmit = React.useCallback(async () => {
+    if (!activeScale?.id || submittingRef.current) return;
+    const scale = activeScale;
+    const answers = buildAnswersForScale(scale);
+    if (Object.keys(answers).length === 0) {
+      setSubmitError('请先完成量表作答');
+      return;
+    }
+
+    submittingRef.current = true;
+    setSubmitting(true);
+    setSubmitError('');
+
+    try {
+      if (!slug || !apiBaseUrl || scale.scale !== 'dynamic') {
+        const mock = {
+          assessmentId: scale.id,
+          assessmentTitle: scale.name,
+          assessmentSubtitle: scale.subtitle,
+          resultSummary: '演示环境：未连接企业测评接口，以下为示意结果。',
+          result: {
+            type: 'sum',
+            totalScore: 72,
+            level: '一般偏好',
+            summary: '这是本地演示结果，不代表真实计分。连接企业 API 后将展示正式报告。',
+          },
+        };
+        markScaleCompleted(scale.id, mock);
+        goto('scaleResult');
+        return;
       }
 
-      await submitEnterpriseOnboardingReports(apiBaseUrl, slug, {
+      const response = await submitEnterpriseOnboardingReports(apiBaseUrl, slug, {
         visitorKey: visitorKey || createVisitorKey(),
         employeeInfo: basicForm,
-        reports,
+        reports: [{
+          clientSubmissionId: createSubmissionId(),
+          assessmentId: scale.id,
+          assessmentVersion: Number(scale.version) > 0 ? Number(scale.version) : 1,
+          answers,
+        }],
       });
-      finishWithMockReport(true);
+      const saved = Array.isArray(response?.reports) ? response.reports[0] : null;
+      const reportPayload = {
+        assessmentId: scale.id,
+        publicId: saved?.publicId,
+        assessmentTitle: saved?.assessmentTitle || scale.name,
+        assessmentSubtitle: saved?.assessmentSubtitle || scale.subtitle,
+        scoringType: saved?.scoringType,
+        resultSummary: saved?.resultSummary || '',
+        result: saved?.result || null,
+      };
+      markScaleCompleted(scale.id, reportPayload);
+      goto('scaleResult');
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : '提交失败，请稍后重试');
-      finishWithMockReport(false);
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
     }
   }, [
-    activeScales,
-    answersByScale,
-    answersKey,
+    activeScale,
     apiBaseUrl,
     basicForm,
-    basicKey,
-    progressKey,
+    buildAnswersForScale,
+    markScaleCompleted,
     slug,
-    submitDone,
     visitorKey,
-    finishWithMockReport,
   ]);
+
+  const showStepper = step === 'basic' || step === 'select' || step === 'scale' || step === 'scaleResult';
 
   return (
     <div className="gxa-onb-root" style={{
@@ -241,17 +307,22 @@ const OnboardingAssessment = ({
       color: '#1A2846',
       fontFamily: '"Noto Sans SC", "PingFang SC", system-ui, sans-serif',
     }}>
-      {/* 顶部导航 */}
       <OnbHeader primary={primary} primaryDark={primaryDark} step={step} companyName={companyName} siteName={siteName} logoUrl={logoUrl} homeHref={homeHref}/>
 
-      {/* 步骤条 */}
-      {step !== 'welcome' && step !== 'complete' && step !== 'report' && (
-        <OnbStepper primary={primary} step={step} scaleIdx={scaleIdx}/>
-      )}
+      {showStepper && <OnbStepper primary={primary} step={step}/>}
 
-      {/* 主内容区 */}
       <main className="gxa-onb-main" style={{ maxWidth: 1120, margin: '0 auto', padding: '40px 40px 120px' }}>
-        {step === 'welcome' && <StepWelcome assessmentCount={activeScales.length} primary={primary} primaryDark={primaryDark} accent={accent} companyName={companyName} slogan={slogan} onNext={() => goto('basic')}/>}
+        {step === 'welcome' && (
+          <StepWelcome
+            assessmentCount={activeScales.length}
+            primary={primary}
+            primaryDark={primaryDark}
+            accent={accent}
+            companyName={companyName}
+            slogan={slogan}
+            onNext={() => goto('basic')}
+          />
+        )}
         {step === 'basic' && (
           <StepBasic
             primary={primary}
@@ -260,38 +331,48 @@ const OnboardingAssessment = ({
             customFields={customEmployeeInfoFields}
             form={basicForm}
             setForm={setBasicForm}
-            onNext={() => { setScaleIdx(0); goto('scale'); }}
+            onNext={() => goto('select')}
             onBack={() => goto('welcome')}
           />
         )}
-        {step === 'scale' && (
-          <StepScale
+        {step === 'select' && (
+          <StepScaleSelect
             scales={activeScales}
+            completedScaleIds={completedScaleIds}
+            allDone={allDone}
             primary={primary}
             primaryDark={primaryDark}
-            scaleIdx={scaleIdx}
-            setScaleIdx={setScaleIdx}
-            answersByScale={answersByScale}
-            setScaleAnswer={setScaleAnswer}
-            onComplete={handleScalesComplete}
+            homeHref={homeHref}
             onBack={() => goto('basic')}
+            onStart={openScale}
+            onViewResult={openScaleResult}
           />
         )}
-        {step === 'complete' && (
-          <StepComplete
+        {step === 'scale' && activeScale && (
+          <StepScale
+            scale={activeScale}
+            primary={primary}
+            primaryDark={primaryDark}
+            answersByScale={answersByScale}
+            setScaleAnswer={setScaleAnswer}
+            submitting={submitting}
+            submitError={submitError}
+            onSubmit={handleSingleScaleSubmit}
+            onBack={() => { setSubmitError(''); goto('select'); }}
+          />
+        )}
+        {step === 'scaleResult' && (
+          <StepScaleResult
+            scale={activeScale}
+            report={currentResult}
             primary={primary}
             primaryDark={primaryDark}
             accent={accent}
-            error={submitError}
-            onRetry={submitError ? handleScalesComplete : undefined}
-            onNext={() => goto('report')}
-            canProceed={submitDone || !slug || !apiBaseUrl}
+            onBack={() => goto('select')}
           />
         )}
-        {step === 'report' && <StepReport scales={activeScales} assessmentCount={activeScales.length} questionCount={activeQuestionCount} primary={primary} primaryDark={primaryDark} accent={accent} warm={warm} companyName={companyName} siteName={siteName} homeHref={homeHref} submitError={submitError}/>}
       </main>
 
-      {/* 底部 */}
       <OnbFooter primary={primary} accent={accent} companyName={companyName} siteName={siteName}/>
     </div>
   );
@@ -322,10 +403,10 @@ const OnbHeader = ({ primary, primaryDark, step, companyName, siteName, logoUrl,
 );
 
 // ==================== 步骤条 ====================
-const STEP_ORDER = ['basic', 'scale', 'complete'];
-const STEP_LABELS = ['基础信息', '量表作答', '完成提交'];
+const STEP_ORDER = ['basic', 'select', 'scale', 'scaleResult'];
+const STEP_LABELS = ['基础信息', '量表选择', '量表作答', '结果查看'];
 
-const OnbStepper = ({ primary, step, scaleIdx }) => {
+const OnbStepper = ({ primary, step }) => {
   const currentIdx = STEP_ORDER.indexOf(step);
   return (
     <div style={{ background: '#fff', borderBottom: '1px solid #E8ECF3' }}>
@@ -879,34 +960,162 @@ const SCALES = [
   },
 ];
 
-const StepScale = ({
+// ==================== 量表选择 ====================
+const StepScaleSelect = ({
   scales,
+  completedScaleIds,
+  allDone,
   primary,
   primaryDark,
-  scaleIdx,
-  setScaleIdx,
+  homeHref,
+  onBack,
+  onStart,
+  onViewResult,
+}) => {
+  const doneSet = new Set(completedScaleIds || []);
+  return (
+    <div style={{ maxWidth: 900, margin: '0 auto' }}>
+      <StepIntro
+        eyebrow="第 2 步 · 量表选择"
+        title="选择要完成的量表"
+        desc="以下为本企业授权的测评量表。可按任意顺序作答；完成并提交后可查看该量表结果，再返回继续完成其余量表。"
+        meta={[`共 ${scales.length} 个量表`, `已完成 ${doneSet.size} 个`]}
+        primary={primary}
+      />
+
+      {allDone ? (
+        <div style={{
+          marginTop: 24, padding: '16px 18px', borderRadius: 8,
+          background: `${primary}0C`, border: `1px solid ${primary}30`,
+          color: '#0F2E5F', fontSize: 14, lineHeight: 1.7,
+        }}>
+          全部量表已完成。你可以继续查看任一量表结果，或
+          <a href={homeHref} style={{ color: primary, marginLeft: 4, fontWeight: 600 }}>返回首页</a>。
+        </div>
+      ) : null}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 28 }}>
+        {(scales || []).map((scale, index) => {
+          const done = doneSet.has(scale.id);
+          return (
+            <div
+              key={scale.id || index}
+              style={{
+                background: '#fff',
+                borderRadius: 8,
+                border: `1px solid ${done ? `${primary}40` : '#E8ECF3'}`,
+                padding: '22px 24px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 20,
+                boxShadow: '0 2px 16px rgba(15,46,95,.04)',
+              }}
+            >
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <div style={{
+                    width: 28, height: 28, borderRadius: '50%',
+                    background: done ? primary : `${primary}12`,
+                    color: done ? '#fff' : primary,
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 13, fontWeight: 700, flexShrink: 0,
+                  }}>
+                    {done ? <Icon name="check" size={14}/> : index + 1}
+                  </div>
+                  <h3 style={{
+                    margin: 0, fontSize: 18, fontWeight: 700, color: '#0F2E5F',
+                    fontFamily: '"Noto Serif SC", serif', letterSpacing: 0.5,
+                    wordBreak: 'break-word',
+                  }}>
+                    {scale.name}
+                  </h3>
+                  {done ? (
+                    <span style={{
+                      fontSize: 11, fontWeight: 600, color: primary,
+                      background: `${primary}12`, padding: '3px 8px', borderRadius: 999,
+                    }}>
+                      已完成
+                    </span>
+                  ) : null}
+                </div>
+                {scale.subtitle ? (
+                  <div style={{ marginTop: 8, marginLeft: 38, fontSize: 13, color: '#4A5A78', lineHeight: 1.6 }}>
+                    {scale.subtitle}
+                  </div>
+                ) : null}
+                <div style={{ marginTop: 10, marginLeft: 38, display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 12, color: '#8B96A8' }}>
+                  <span>共 {scale.total || scale.items?.length || 0} 题</span>
+                  {scale.dur ? <span>约 {scale.dur}</span> : null}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
+                {done ? (
+                  <button
+                    type="button"
+                    onClick={() => onViewResult(scale.id)}
+                    style={{
+                      background: '#fff', color: primary, border: `1.5px solid ${primary}`,
+                      padding: '11px 18px', borderRadius: 4, fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                    }}
+                  >
+                    查看结果
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => onStart(scale.id)}
+                  style={{
+                    background: done ? primaryDark : primary,
+                    color: '#fff', border: 'none',
+                    padding: '11px 18px', borderRadius: 4, fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                  }}
+                >
+                  {done ? '重新作答' : '开始作答'}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ marginTop: 28 }}>
+        <button
+          type="button"
+          onClick={onBack}
+          style={{
+            background: 'transparent', color: '#4A5A78', border: '1px solid #D0D6E0',
+            padding: '14px 26px', borderRadius: 4, fontSize: 14, cursor: 'pointer',
+          }}
+        >
+          ← 返回基础信息
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const StepScale = ({
+  scale,
+  primary,
+  primaryDark,
   answersByScale,
   setScaleAnswer,
-  onComplete,
+  submitting,
+  submitError,
+  onSubmit,
   onBack,
 }) => {
-  const safeIdx = Math.min(Math.max(scaleIdx, 0), Math.max(scales.length - 1, 0));
-  const scale = scales[safeIdx];
-  const scaleId = scale?.id || `scale-${safeIdx}`;
+  const scaleId = scale?.id || 'scale';
   const answers = answersByScale[scaleId] || {};
   const answerKey = (item, i) => (scale?.scale === 'dynamic' && item?.id != null ? item.id : i);
   const answered = (scale?.items || []).filter((item, i) => {
     const key = answerKey(item, i);
     return answers[key] != null && answers[key] !== '';
   }).length;
-  const demoTotal = Math.max(Number(scale?.demoTotal) || 0, 1);
+  const demoTotal = Math.max(Number(scale?.demoTotal) || (scale?.items || []).length || 0, 1);
   const isComplete = answered >= demoTotal;
-
   const setAns = (item, i, v) => setScaleAnswer(scaleId, answerKey(item, i), v);
-
-  React.useEffect(() => {
-    if (safeIdx !== scaleIdx) setScaleIdx(safeIdx);
-  }, [safeIdx, scaleIdx, setScaleIdx]);
 
   if (!scale) {
     return (
@@ -916,40 +1125,18 @@ const StepScale = ({
     );
   }
 
-  const nextScale = () => {
-    if (safeIdx < scales.length - 1) {
-      setScaleIdx(safeIdx + 1);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else {
-      onComplete();
-    }
-  };
-  const prevScale = () => {
-    if (safeIdx > 0) {
-      setScaleIdx(safeIdx - 1);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else {
-      onBack();
-    }
-  };
-
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
-      {/* 量表切换指示 */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-        {scales.map((s, i) => (
-          <div key={s.id || i} style={{
-            flex: 1, height: 4, borderRadius: 2,
-            background: i < safeIdx ? primary : (i === safeIdx ? `linear-gradient(90deg, ${primary} ${(answered / demoTotal) * 100}%, #E8ECF3 ${(answered / demoTotal) * 100}%)` : '#E8ECF3'),
-          }}/>
-        ))}
-      </div>
+      <div style={{
+        height: 4, borderRadius: 2, marginBottom: 20,
+        background: `linear-gradient(90deg, ${primary} ${(answered / demoTotal) * 100}%, #E8ECF3 ${(answered / demoTotal) * 100}%)`,
+      }}/>
 
       <StepIntro
-        eyebrow={`第 3 步 · 量表 ${safeIdx + 1} / ${scales.length}`}
+        eyebrow="第 3 步 · 量表作答"
         title={scale.name}
         desc={scale.subtitle}
-        meta={[`共 ${scale.total} 题`, `约 ${scale.dur}`]}
+        meta={[`共 ${scale.total || demoTotal} 题`, scale.dur ? `约 ${scale.dur}` : null].filter(Boolean)}
         primary={primary}
       />
 
@@ -984,7 +1171,7 @@ const StepScale = ({
                   style={{ display: 'grid', gridTemplateColumns: `repeat(${optionCount}, minmax(0, 1fr))`, gap: 8, paddingLeft: 38 }}
                 >
                   {(item.options || []).map((option, oi) => (
-                    <button key={option.id || oi} onClick={() => setAns(item, i, option.id || oi)} style={{
+                    <button key={option.id || oi} type="button" onClick={() => setAns(item, i, option.id || oi)} style={{
                       padding: '12px 8px', textAlign: 'center',
                       background: selected === (option.id || oi) ? primary : '#fff',
                       color: selected === (option.id || oi) ? '#fff' : '#4A5A78',
@@ -1000,7 +1187,7 @@ const StepScale = ({
               ) : scale.scale === 'binary' ? (
                 <div className="gxa-scale-options-binary" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   {[item.a, item.b].map((opt, oi) => (
-                    <button key={oi} onClick={() => setAns(item, i, oi)} style={{
+                    <button key={oi} type="button" onClick={() => setAns(item, i, oi)} style={{
                       padding: '18px 20px', textAlign: 'left',
                       background: selected === oi ? `${primary}12` : '#fff',
                       border: selected === oi ? `1.5px solid ${primary}` : '1.5px solid #E8ECF3',
@@ -1030,7 +1217,7 @@ const StepScale = ({
                   style={{ display: 'grid', gridTemplateColumns: `repeat(${scale.scaleLabels.length}, minmax(0, 1fr))`, gap: 8, paddingLeft: 38 }}
                 >
                   {scale.scaleLabels.map((lbl, li) => (
-                    <button key={li} onClick={() => setAns(item, i, li)} style={{
+                    <button key={li} type="button" onClick={() => setAns(item, i, li)} style={{
                       padding: '12px 8px', textAlign: 'center',
                       background: selected === li ? primary : '#fff',
                       color: selected === li ? '#fff' : '#4A5A78',
@@ -1056,16 +1243,161 @@ const StepScale = ({
           <Icon name="check" size={14} color={primary}/>
           进度自动保存 · 已答 {answered} / {demoTotal} 题
         </div>
+        {submitError ? (
+          <div style={{ marginTop: 12, padding: '12px 16px', background: '#FFF6F4', border: '1px solid #F3C6C2', borderRadius: 4, color: '#8A2F2A', fontSize: 13, lineHeight: 1.6 }}>
+            {submitError}
+          </div>
+        ) : null}
       </div>
 
       <StepActions
-        onBack={prevScale}
-        onNext={nextScale}
-        nextDisabled={!isComplete}
+        onBack={onBack}
+        onNext={onSubmit}
+        nextDisabled={!isComplete || submitting}
         primary={primary}
-        backLabel={safeIdx === 0 ? '返回基础信息' : `上一个量表`}
-        nextLabel={safeIdx === scales.length - 1 ? '提交量表 →' : `下一个量表 →`}
+        backLabel="返回量表选择"
+        nextLabel={submitting ? '提交中…' : '提交本量表 →'}
       />
+    </div>
+  );
+};
+
+function renderScaleResultBody(result, primary, accent) {
+  if (!result || typeof result !== 'object') {
+    return (
+      <p style={{ margin: 0, fontSize: 14, color: '#4A5A78', lineHeight: 1.8 }}>
+        已成功提交本量表。详细解读可在管理端量表结果中查看。
+      </p>
+    );
+  }
+
+  if (result.type === 'match') {
+    return (
+      <div>
+        <div style={{ fontSize: 28, fontWeight: 700, color: '#0F2E5F', fontFamily: '"Noto Serif SC", serif', letterSpacing: 1 }}>
+          {result.title || result.matchTitle || '匹配结果'}
+        </div>
+        {result.description || result.matchDescription ? (
+          <p style={{ margin: '14px 0 0', fontSize: 15, color: '#4A5A78', lineHeight: 1.85, whiteSpace: 'pre-wrap' }}>
+            {result.description || result.matchDescription}
+          </p>
+        ) : null}
+        {result.shareText ? (
+          <div style={{ marginTop: 18, padding: '12px 14px', background: `${primary}08`, borderRadius: 6, fontSize: 13, color: primary, lineHeight: 1.7 }}>
+            {result.shareText}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (result.type === 'sum') {
+    return (
+      <div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ fontSize: 48, fontWeight: 700, color: primary, fontFamily: '"Noto Serif SC", serif', lineHeight: 1 }}>
+            {result.totalScore ?? '—'}
+          </div>
+          {result.level ? (
+            <span style={{ fontSize: 15, fontWeight: 600, color: accent || primary }}>{result.level}</span>
+          ) : null}
+        </div>
+        {result.summary ? (
+          <p style={{ margin: '16px 0 0', fontSize: 14, color: '#4A5A78', lineHeight: 1.85, whiteSpace: 'pre-wrap' }}>
+            {result.summary}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (result.type === 'dimension' && Array.isArray(result.dimensions)) {
+    return (
+      <div>
+        {result.summary ? (
+          <p style={{ margin: '0 0 18px', fontSize: 14, color: '#4A5A78', lineHeight: 1.85, whiteSpace: 'pre-wrap' }}>
+            {result.summary}
+          </p>
+        ) : null}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {result.dimensions.map((dim, index) => (
+            <div key={dim.id || dim.name || index} style={{ padding: '14px 16px', background: '#FBFAF7', borderRadius: 6 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+                <div style={{ fontSize: 15, fontWeight: 600, color: '#0F2E5F' }}>{dim.title || dim.name || `维度 ${index + 1}`}</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: primary }}>{dim.score ?? dim.average ?? '—'}</div>
+              </div>
+              {dim.level ? <div style={{ marginTop: 6, fontSize: 12, color: '#8B96A8' }}>{dim.level}</div> : null}
+              {dim.description ? (
+                <p style={{ margin: '8px 0 0', fontSize: 13, color: '#4A5A78', lineHeight: 1.75, whiteSpace: 'pre-wrap' }}>{dim.description}</p>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <p style={{ margin: 0, fontSize: 14, color: '#4A5A78', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
+      {typeof result.summary === 'string' ? result.summary : '本量表已提交完成。'}
+    </p>
+  );
+}
+
+const StepScaleResult = ({ scale, report, primary, primaryDark, accent, onBack }) => {
+  const title = report?.assessmentTitle || scale?.name || '量表结果';
+  const subtitle = report?.assessmentSubtitle || scale?.subtitle || '';
+  const result = report?.result;
+
+  return (
+    <div style={{ maxWidth: 900, margin: '0 auto' }}>
+      <div style={{
+        background: `linear-gradient(135deg, ${primary} 0%, ${primaryDark} 100%)`,
+        borderRadius: 8, padding: '36px 40px', color: '#fff', position: 'relative', overflow: 'hidden',
+      }}>
+        <div style={{ fontSize: 12, opacity: 0.8, letterSpacing: 1, marginBottom: 10 }}>SCALE RESULT · 量表结果</div>
+        <h1 style={{
+          margin: 0, fontFamily: '"Noto Serif SC", serif', fontSize: 32, fontWeight: 700,
+          letterSpacing: 1, lineHeight: 1.35, wordBreak: 'break-word',
+        }}>
+          {title}
+        </h1>
+        {subtitle ? <p style={{ margin: '10px 0 0', fontSize: 14, opacity: 0.88, lineHeight: 1.7 }}>{subtitle}</p> : null}
+      </div>
+
+      <div style={{ background: '#fff', borderRadius: 8, padding: 32, marginTop: 20, boxShadow: '0 2px 20px rgba(15,46,95,.04)' }}>
+        {scale?.reportIntro ? (
+          <div style={{ marginBottom: 20, padding: '14px 16px', background: `${primary}08`, borderRadius: 6, fontSize: 13, color: '#4A5A78', lineHeight: 1.75 }}>
+            {scale.reportIntro}
+          </div>
+        ) : null}
+        {report?.resultSummary && !result ? (
+          <p style={{ margin: '0 0 16px', fontSize: 14, color: '#4A5A78', lineHeight: 1.85, whiteSpace: 'pre-wrap' }}>
+            {report.resultSummary}
+          </p>
+        ) : null}
+        {renderScaleResultBody(result, primary, accent)}
+        {scale?.disclaimer ? (
+          <p style={{ margin: '24px 0 0', fontSize: 12, color: '#8B96A8', lineHeight: 1.7 }}>{scale.disclaimer}</p>
+        ) : (
+          <p style={{ margin: '24px 0 0', fontSize: 12, color: '#8B96A8', lineHeight: 1.7 }}>
+            本结果仅供参考，不作为临床诊断依据。
+          </p>
+        )}
+      </div>
+
+      <div style={{ marginTop: 28, display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          onClick={onBack}
+          style={{
+            background: '#fff', border: '1.5px solid #D0D6E0', color: '#1A2846',
+            padding: '12px 22px', borderRadius: 4, fontSize: 14, cursor: 'pointer', fontWeight: 500,
+          }}
+        >
+          ← 返回量表选择
+        </button>
+      </div>
     </div>
   );
 };
