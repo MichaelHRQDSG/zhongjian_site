@@ -14,7 +14,11 @@ export default async function EnterpriseOnboardingPage({
 }) {
   const { slug } = await params;
   const payload = await fetchEnterpriseAssessments(slug);
-  if (!payload || payload.assessments.length === 0) notFound();
+  if (!payload) notFound();
+  if (payload.loginRequired && !payload.authenticated) {
+    return null;
+  }
+  if (payload.assessments.length === 0) notFound();
 
   return (
     <OnboardingAssessment

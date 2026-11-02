@@ -28,6 +28,8 @@ export interface CustomEmployeeInfoField {
 
 export interface EnterpriseAssessmentPayload extends SiteBranding {
   slug: string;
+  loginRequired?: boolean;
+  authenticated?: boolean;
   /** 企业链接需展示的员工基本信息字段 ID；未返回时前端按全部字段处理 */
   employeeInfoFields?: string[];
   /** 仅当前企业新增的字段定义，未勾选的不会出现在 employeeInfoFields 里 */
@@ -142,6 +144,23 @@ export function resolveEmployeeInfoFields(payload?: {
 
 const API_BASE_URL = resolveApiBaseUrl({ preferAssessment: true });
 
+async function enterpriseAuthHeader(slug?: string): Promise<HeadersInit> {
+  if (!slug) return {};
+  if (typeof window !== "undefined") {
+    const token = window.localStorage.getItem(`eap_ent_token_${slug}`) || "";
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }
+  try {
+    const { cookies } = await import("next/headers");
+    const store = await cookies();
+    const raw = store.get(`eap_ent_${slug}`)?.value || "";
+    const token = raw ? decodeURIComponent(raw) : "";
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
+}
+
 const FALLBACK_HERO_SLIDES: SiteHeroSlide[] = [
   {
     imageUrl: "/assets/hero-site.jpg",
@@ -230,7 +249,7 @@ export async function fetchEnterpriseAssessments(slug: string) {
   try {
     const response = await fetch(
       `${API_BASE_URL}/api/web/assessment-enterprises/${encodeURIComponent(slug)}`,
-      { cache: "no-store" },
+      { cache: "no-store", headers: await enterpriseAuthHeader(slug) },
     );
     if (!response.ok) return undefined;
     const raw = await response.json();
@@ -272,7 +291,10 @@ export async function fetchPublicArticles(slug?: string): Promise<unknown[] | nu
     const url = slug
       ? `${API_BASE_URL}/api/web/assessment-enterprises/${encodeURIComponent(slug)}`
       : `${API_BASE_URL}/api/web/assessment-enterprises/default`;
-    const response = await fetch(url, { cache: "no-store" });
+    const response = await fetch(url, {
+      cache: "no-store",
+      headers: await enterpriseAuthHeader(slug),
+    });
     if (!response.ok) return null;
     const payload = unwrapPayload<{ articles?: unknown }>(await response.json());
     return Array.isArray(payload?.articles) ? payload.articles : null;
@@ -327,7 +349,10 @@ export async function submitEnterpriseOnboardingReports(
     `${base}/api/web/assessment-enterprises/${encodeURIComponent(slug)}/reports`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(await enterpriseAuthHeader(slug)),
+      },
       body: JSON.stringify(body),
     },
   );

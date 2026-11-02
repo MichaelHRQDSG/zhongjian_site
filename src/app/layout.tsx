@@ -1,4 +1,8 @@
+import { Suspense } from 'react';
 import type { Metadata, Viewport } from 'next';
+
+import { EnterpriseAuthGate } from '@/components/auth/EnterpriseAuthGate';
+import { getAssessmentApiBaseUrl } from '@/lib/enterprise-assessments';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -17,7 +21,13 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="zh-CN">
-      <body className="antialiased">{children}</body>
+      <body className="antialiased">
+        <Suspense fallback={<div className="min-h-screen bg-[var(--color-warm-light)]" />}>
+          <EnterpriseAuthGate apiBaseUrl={getAssessmentApiBaseUrl()}>
+            {children}
+          </EnterpriseAuthGate>
+        </Suspense>
+      </body>
     </html>
   );
 }
