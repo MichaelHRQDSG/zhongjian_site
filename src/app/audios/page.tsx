@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
 import { AudiosIndexPage } from '@/components/audios/AudiosIndexPage';
 import { AUDIOS } from '@/lib/audios';
-import { fetchDefaultBranding } from '@/lib/enterprise-assessments';
+import { fetchDefaultBranding, fetchEnterpriseAssessments } from '@/lib/enterprise-assessments';
 import { resolveEnterpriseNav } from '@/lib/enterprise-context';
 
 export const dynamic = 'force-dynamic';
@@ -21,5 +22,11 @@ export default async function AudiosPage({
 }) {
   const branding = await fetchDefaultBranding();
   const nav = resolveEnterpriseNav(await searchParams);
+  if (nav.enterpriseSlug) {
+    const enterprise = await fetchEnterpriseAssessments(nav.enterpriseSlug);
+    if (enterprise?.hideLibrary) {
+      redirect(nav.homeHref);
+    }
+  }
   return <AudiosIndexPage audios={AUDIOS} siteName={branding.siteName} homeHref={nav.homeHref} />;
 }

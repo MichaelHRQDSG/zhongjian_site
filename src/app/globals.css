@@ -149,6 +149,17 @@ img {
 
   .gxa-services {
     grid-template-columns: 1fr 1fr !important;
+    max-width: none !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  .gxa-services.gxa-services--1 {
+    grid-template-columns: 1fr !important;
+  }
+
+  .gxa-services.gxa-services--2 {
+    grid-template-columns: 1fr 1fr !important;
   }
 
   .gxa-services > a {

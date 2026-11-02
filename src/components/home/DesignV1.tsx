@@ -60,6 +60,7 @@ const DesignV1 = ({
   const companyName = (brand.companyName || '').trim();
   const onboardingEntryLabel = (brand.onboardingEntryLabel || '').trim() || '员工心理测评';
   const hideConsultation = Boolean(brand.hideConsultation);
+  const hideLibrary = Boolean(brand.hideLibrary);
   const enterpriseSlug = enterpriseSlugFromHomeHref(homeHref);
   const siteLink = React.useCallback(
     (href: string) => withEnterpriseQuery(href, enterpriseSlug),
@@ -67,10 +68,35 @@ const DesignV1 = ({
   );
   const navItems = NAV_ITEMS
     .filter((item) => !(hideConsultation && item.href === '#consultation'))
+    .filter((item) => !(hideLibrary && item.href === '#library'))
     .map((item) => (
       item.href === '/onboarding' ? { ...item, label: onboardingEntryLabel } : item
     ));
-  const serviceModules = EAP_MODULES.filter((item) => !(hideConsultation && item.id === 'consultation'));
+  const serviceModules = EAP_MODULES.filter((item) => {
+    if (hideConsultation && item.id === 'consultation') return false;
+    if (hideLibrary && item.id === 'library') return false;
+    return true;
+  });
+  const serviceCount = serviceModules.length;
+  const servicesDesc = !hideLibrary && !hideConsultation
+    ? '从心理建档、日常陪伴到专业咨询 —— 三个入口，陪你走过每一段路'
+    : !hideLibrary && hideConsultation
+      ? '从心理建档到日常陪伴 —— 陪你走过每一段路'
+      : hideLibrary && !hideConsultation
+        ? '从心理建档到专业咨询 —— 陪你走过每一段路'
+        : '完成心理建档与心理测评 —— 陪你走过这一段路';
+  const heroServicesHint = !hideLibrary && !hideConsultation
+    ? '心理测评 · 心理知识库 · 预约咨询 —— 三个入口陪你走过每一段路'
+    : !hideLibrary && hideConsultation
+      ? '心理测评 · 心理知识库 —— 陪你走过每一段路'
+      : hideLibrary && !hideConsultation
+        ? '心理测评 · 预约咨询 —— 陪你走过每一段路'
+        : '心理测评 —— 陪你走过每一段路';
+  const serviceGridStyle = serviceCount <= 1
+    ? { display: 'grid', gridTemplateColumns: '1fr', gap: 20, marginTop: 64, maxWidth: 880, marginLeft: 'auto', marginRight: 'auto' }
+    : serviceCount === 2
+      ? { display: 'grid', gridTemplateColumns: '1.25fr 1fr', gap: 20, marginTop: 64 }
+      : { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20, marginTop: 64 };
   const homeArticles = (articles ?? ARTICLES).slice(0, 3);
   const heroScenes = (brand.heroSlides?.length ? brand.heroSlides : DEFAULT_BRANDING_FALLBACK.heroSlides)
     .map((slide) => ({
@@ -145,6 +171,7 @@ const DesignV1 = ({
               onboardingHref={onboardingHref}
               onboardingEntryLabel={onboardingEntryLabel}
               hideConsultation={hideConsultation}
+              hideLibrary={hideLibrary}
             />
           </div>
         </div>
@@ -218,9 +245,7 @@ const DesignV1 = ({
                   了解 EAP 服务
                 </div>
                 <div style={{ fontSize: 13, color: '#4A5A78', marginTop: 4 }}>
-                  {hideConsultation
-                    ? '心理测评 · 心理知识库 —— 陪你走过每一段路'
-                    : '心理测评 · 心理知识库 · 预约咨询 —— 三个入口陪你走过每一段路'}
+                  {heroServicesHint}
                 </div>
               </div>
               <div style={{ color: primary, display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 500, position: 'relative', flexShrink: 0 }}>
@@ -306,16 +331,18 @@ const DesignV1 = ({
           <SectionTitle
             eyebrow="核心服务"
             title="陪你走过每一段路"
-            desc={hideConsultation
-              ? '从心理建档到日常陪伴 —— 陪你走过每一段路'
-              : '从心理建档、日常陪伴到专业咨询 —— 三个入口，陪你走过每一段路'}
+            desc={servicesDesc}
             primary={primary}
           />
 
-          <div className="gxa-services" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20, marginTop: 64 }}>
+          <div
+            className={`gxa-services gxa-services--${serviceCount <= 1 ? '1' : serviceCount === 2 ? '2' : '3'}`}
+            style={serviceGridStyle}
+          >
             {serviceModules.map(m => {
               const isNew = m.badge === 'NEW';
               const href = m.id === 'onboarding' ? onboardingHref : `#${m.id}`;
+              const featuredSpan = serviceCount >= 3 && isNew;
               return (
                 <a key={m.id} href={href} style={{
                   background: isNew
@@ -328,7 +355,7 @@ const DesignV1 = ({
                   display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
                   transition: 'all .3s',
                   position: 'relative', overflow: 'hidden',
-                  gridColumn: isNew ? 'span 2' : 'span 1',
+                  gridColumn: featuredSpan ? 'span 2' : 'auto',
                   boxShadow: isNew ? `0 20px 40px -20px ${primary}66` : 'none',
                 }}
                   className="module-card"
@@ -388,6 +415,7 @@ const DesignV1 = ({
       </section>
 
       {/* ==================== 心理知识库（合并：故事 + 图文 + 音频） ==================== */}
+      {!hideLibrary && (
       <section id="library" style={{ padding: '110px 0', background: warm }}>
         <div style={{ maxWidth: 1360, margin: '0 auto', padding: '0 40px' }}>
           <SectionTitle
@@ -442,6 +470,7 @@ const DesignV1 = ({
           </div>
         </div>
       </section>
+      )}
 
       {/* ==================== 预约咨询 · 咨询师团队 ==================== */}
       {!hideConsultation && (
@@ -554,6 +583,7 @@ const DesignV1 = ({
         onboardingHref={onboardingHref}
         homeHref={homeHref}
         hideConsultation={hideConsultation}
+        hideLibrary={hideLibrary}
         primary={primary}
         primaryDark={primaryDark}
         accent={accent}
@@ -595,18 +625,19 @@ const SectionTitle = ({ eyebrow, title, desc, primary, align = 'center' }) => (
 );
 
 // 页脚组件
-const Footer = ({ branding, onboardingEntryLabel, onboardingHref = '/onboarding', homeHref = '/', hideConsultation = false, primary, primaryDark, accent }) => {
+const Footer = ({ branding, onboardingEntryLabel, onboardingHref = '/onboarding', homeHref = '/', hideConsultation = false, hideLibrary = false, primary, primaryDark, accent }) => {
   const companyName = (branding.companyName || '').trim();
   const entryLabel = (onboardingEntryLabel || '').trim() || '员工心理测评';
   const enterpriseSlug = enterpriseSlugFromHomeHref(homeHref);
   const hashHref = (hash) => (homeHref === '/' ? `#${hash}` : `${homeHref}#${hash}`);
+  const serviceItems = [
+    { label: entryLabel, href: onboardingHref },
+    ...(!hideLibrary ? [{ label: '心理知识库', href: hashHref('library') }] : []),
+  ];
   const columns = [
     {
       title: '心理服务',
-      items: [
-        { label: entryLabel, href: onboardingHref },
-        { label: '心理知识库', href: hashHref('library') },
-      ],
+      items: serviceItems,
     },
     ...(!hideConsultation ? [{
       title: '专业支持',

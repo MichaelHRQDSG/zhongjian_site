@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { ArticleDetailPage } from '@/components/articles/ArticleDetailPage';
 import { ARTICLES, articlesFromApi, getAllArticleSlugs } from '@/lib/articles';
 import { fetchDefaultBranding, fetchEnterpriseAssessments, fetchPublicArticles } from '@/lib/enterprise-assessments';
@@ -13,12 +13,14 @@ export function generateStaticParams() {
 
 async function loadArticlePage(slug: string, searchParams: Record<string, string | string[] | undefined>) {
   const nav = resolveEnterpriseNav(searchParams);
-  const [branding, articlePayload] = await Promise.all([
-    nav.enterpriseSlug
-      ? fetchEnterpriseAssessments(nav.enterpriseSlug).then((item) => item || fetchDefaultBranding())
-      : fetchDefaultBranding(),
+  const [enterprise, articlePayload] = await Promise.all([
+    nav.enterpriseSlug ? fetchEnterpriseAssessments(nav.enterpriseSlug) : Promise.resolve(undefined),
     fetchPublicArticles(nav.enterpriseSlug || undefined),
   ]);
+  if (enterprise?.hideLibrary) {
+    redirect(nav.homeHref);
+  }
+  const branding = enterprise || (await fetchDefaultBranding());
   const articles = articlesFromApi(articlePayload) ?? ARTICLES;
   const article = articles.find((item) => item.slug === slug);
   return { nav, branding, articles, article };

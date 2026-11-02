@@ -15,12 +15,14 @@ export default function MobileNav({
   onboardingHref = '/onboarding',
   onboardingEntryLabel = '员工心理测评',
   hideConsultation = false,
+  hideLibrary = false,
 }: {
   siteName?: string;
   homeHref?: string;
   onboardingHref?: string;
   onboardingEntryLabel?: string;
   hideConsultation?: boolean;
+  hideLibrary?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const primary = tokens.primary;
@@ -29,6 +31,7 @@ export default function MobileNav({
   const enterpriseSlug = enterpriseSlugFromHomeHref(homeHref);
   const navItems = NAV_ITEMS
     .filter((item) => !(hideConsultation && item.href === '#consultation'))
+    .filter((item) => !(hideLibrary && item.href === '#library'))
     .map((item) => (
       item.href === '/onboarding' ? { ...item, label: entryLabel } : item
     ));

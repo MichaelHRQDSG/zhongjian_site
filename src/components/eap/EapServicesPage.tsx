@@ -57,19 +57,39 @@ export default function EapServicesPage({
   onboardingHref = '/onboarding',
   siteName = '心安 EAP',
   hideConsultation = false,
+  hideLibrary = false,
 }: {
   homeHref?: string;
   onboardingHref?: string;
   siteName?: string;
   hideConsultation?: boolean;
+  hideLibrary?: boolean;
 }) {
   const primary = tokens.primary;
   const primaryDark = tokens.primaryDark;
   const accent = tokens.accent;
   const warm = tokens.warm;
-  const visibleServices = hideConsultation
-    ? SERVICES.filter((service) => service.id !== 'consultation')
-    : SERVICES;
+  const visibleServices = SERVICES.filter((service) => {
+    if (hideConsultation && service.id === 'consultation') return false;
+    if (hideLibrary && service.id === 'library') return false;
+    return true;
+  });
+  const serviceCountLabel =
+    visibleServices.length === 1 ? '一类' : visibleServices.length === 2 ? '两类' : '三类';
+  const pathCopy =
+    !hideLibrary && !hideConsultation
+      ? '本平台围绕「认识自己 → 自我调节 → 专业陪伴」设计服务路径，你可以根据当下状态选择合适入口。'
+      : !hideLibrary && hideConsultation
+        ? '本平台围绕「认识自己 → 自我调节」设计服务路径，你可以根据当下状态选择合适入口。'
+        : hideLibrary && !hideConsultation
+          ? '本平台围绕「认识自己 → 专业陪伴」设计服务路径，你可以根据当下状态选择合适入口。'
+          : '本平台以心理测评帮助你认识自己，你可以根据当下状态开始测评。';
+  const ctaCopy =
+    !hideConsultation
+      ? '无论是建立心理基线，还是预约一次倾谈，我们都在这里。'
+      : !hideLibrary
+        ? '可以从心理测评或知识库开始，我们都在这里。'
+        : '可以从心理测评开始，我们都在这里。';
 
   return (
     <div style={{ background: '#FFFFFF', color: '#1A2846', fontFamily: '"Noto Sans SC", "PingFang SC", system-ui, sans-serif', minHeight: '100vh' }}>
@@ -135,11 +155,9 @@ export default function EapServicesPage({
       <section style={{ padding: '40px 24px', background: '#FBFAF7' }}>
         <div style={{ maxWidth: 860, margin: '0 auto' }}>
           <SectionEyebrow primary={primary}>EAP 服务包含哪些</SectionEyebrow>
-          <h2 className="eap-section-title" style={headingStyle}>{hideConsultation ? '两类核心服务，覆盖从自助到求助' : '三类核心服务，覆盖从自助到求助'}</h2>
+          <h2 className="eap-section-title" style={headingStyle}>{`${serviceCountLabel}核心服务，覆盖从自助到求助`}</h2>
           <p style={{ ...bodyStyle, marginTop: 10, marginBottom: 20 }}>
-            {hideConsultation
-              ? '本平台围绕「认识自己 → 自我调节」设计服务路径，你可以根据当下状态选择合适入口。'
-              : '本平台围绕「认识自己 → 自我调节 → 专业陪伴」设计服务路径，你可以根据当下状态选择合适入口。'}
+            {pathCopy}
           </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -214,9 +232,7 @@ export default function EapServicesPage({
         <div style={{ maxWidth: 860, margin: '0 auto', textAlign: 'center' }}>
           <h2 className="eap-section-title" style={{ ...headingStyle, textAlign: 'center' }}>准备好了，可以从这里开始</h2>
           <p style={{ ...bodyStyle, marginTop: 10, textAlign: 'center' }}>
-            {hideConsultation
-              ? '可以从心理测评开始，我们都在这里。'
-              : '无论是建立心理基线，还是预约一次倾谈，我们都在这里。'}
+            {ctaCopy}
           </p>
           <div style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap', marginTop: 32 }}>
             <Link

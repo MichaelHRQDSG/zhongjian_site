@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
 import { ArticlesIndexPage } from '@/components/articles/ArticlesIndexPage';
 import { ARTICLES, articlesFromApi } from '@/lib/articles';
 import { fetchDefaultBranding, fetchEnterpriseAssessments, fetchPublicArticles } from '@/lib/enterprise-assessments';
@@ -28,12 +29,16 @@ export default async function ArticlesPage({
 }) {
   const params = await searchParams;
   const nav = resolveEnterpriseNav(params);
-  const [branding, articlePayload] = await Promise.all([
+  const [enterpriseOrDefault, articlePayload] = await Promise.all([
     nav.enterpriseSlug
-      ? fetchEnterpriseAssessments(nav.enterpriseSlug).then((item) => item || fetchDefaultBranding())
-      : fetchDefaultBranding(),
+      ? fetchEnterpriseAssessments(nav.enterpriseSlug)
+      : Promise.resolve(undefined),
     fetchPublicArticles(nav.enterpriseSlug || undefined),
   ]);
+  if (enterpriseOrDefault?.hideLibrary) {
+    redirect(nav.homeHref);
+  }
+  const branding = enterpriseOrDefault || (await fetchDefaultBranding());
   return (
     <ArticlesIndexPage
       articles={articlesFromApi(articlePayload) ?? ARTICLES}

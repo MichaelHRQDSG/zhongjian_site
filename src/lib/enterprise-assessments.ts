@@ -17,6 +17,8 @@ export interface SiteBranding {
   heroSlides: SiteHeroSlide[];
   /** 仅定制化企业：为 true 时隐藏预约心理咨询及相关图片 */
   hideConsultation?: boolean;
+  /** 仅定制化企业：为 true 时隐藏心理知识库（图文与音频） */
+  hideLibrary?: boolean;
 }
 
 export interface CustomEmployeeInfoField {
@@ -219,6 +221,8 @@ function normalizeBranding(raw: unknown): SiteBranding {
       String(payload.onboardingEntryLabel || FALLBACK_BRANDING.onboardingEntryLabel).trim()
       || FALLBACK_BRANDING.onboardingEntryLabel,
     heroSlides: normalizeHeroSlides(payload.heroSlides),
+    hideConsultation: Boolean(payload.hideConsultation),
+    hideLibrary: Boolean(payload.hideLibrary),
   };
 }
 

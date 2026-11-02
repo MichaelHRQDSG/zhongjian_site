@@ -29,6 +29,7 @@ export default async function EapServicesRoutePage({
       homeHref={nav.homeHref}
       onboardingHref={nav.onboardingHref}
       hideConsultation={Boolean(enterprise?.hideConsultation)}
+      hideLibrary={Boolean(enterprise?.hideLibrary)}
     />
   );
 }
