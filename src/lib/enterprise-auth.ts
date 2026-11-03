@@ -104,11 +104,11 @@ export async function loginEnterpriseSite(
   return payload;
 }
 
-function unwrap(raw: unknown): Record<string, any> {
+function unwrap(raw: unknown): Record<string, unknown> {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
   const obj = raw as Record<string, unknown>;
   if (obj.data && typeof obj.data === "object" && !Array.isArray(obj.data)) {
-    return obj.data as Record<string, any>;
+    return obj.data as Record<string, unknown>;
   }
   return obj;
 }
