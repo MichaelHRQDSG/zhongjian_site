@@ -1,4 +1,8 @@
-import { resolveApiBaseUrl } from "@/lib/backend-env";
+import {
+  resolveApiBaseUrl,
+  resolveBrowserApiBaseUrl,
+  resolvePublicBaseUrl,
+} from "@/lib/backend-env";
 
 export interface SiteHeroSlide {
   imageUrl: string;
@@ -143,6 +147,8 @@ export function resolveEmployeeInfoFields(payload?: {
 }
 
 const API_BASE_URL = resolveApiBaseUrl({ preferAssessment: true });
+/** 浏览器可访问的静态/公网前缀（勿用 127.0.0.1） */
+const PUBLIC_BASE_URL = resolvePublicBaseUrl();
 
 async function enterpriseAuthHeader(slug?: string): Promise<HeadersInit> {
   if (!slug) return {};
@@ -202,9 +208,16 @@ function unwrapPayload<T extends object>(raw: unknown): T | undefined {
 function normalizeMediaUrl(url: string | undefined, fallback: string): string {
   const value = (url || "").trim();
   if (!value) return fallback;
-  if (/^https?:\/\//i.test(value) || value.startsWith("data:")) return value;
+  if (value.startsWith("data:")) return value;
+  // 后端偶发返回 loopback 绝对地址，浏览器无法加载 → 换成公网或同源相对路径
+  if (/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?/i.test(value)) {
+    const path = value.replace(/^https?:\/\/[^/]+/i, "") || "/";
+    return PUBLIC_BASE_URL ? `${PUBLIC_BASE_URL}${path}` : path;
+  }
+  if (/^https?:\/\//i.test(value)) return value;
   if (value.startsWith("/static/")) {
-    return `${API_BASE_URL}${value}`;
+    // 优先公网 EAP 静态域；否则走 corp 同源 /static（Next rewrite）
+    return PUBLIC_BASE_URL ? `${PUBLIC_BASE_URL}${value}` : value;
   }
   return value.startsWith("/") ? value : `/${value}`;
 }
@@ -331,9 +344,16 @@ export function toOnboardingScales(payload: EnterpriseAssessmentPayload) {
   });
 }
 
-/** 服务端可读的 API 根地址，供页面 props 传给客户端提交。 */
+/** @deprecated 服务端 loopback 地址，勿再传给浏览器；请用 getBrowserAssessmentApiBaseUrl */
 export function getAssessmentApiBaseUrl() {
   return API_BASE_URL;
+}
+
+/**
+ * 浏览器提交用的 API 根（默认空=同源 /api，经 Next rewrite 到本机 backend）。
+ */
+export function getBrowserAssessmentApiBaseUrl() {
+  return resolveBrowserApiBaseUrl();
 }
 
 export async function submitEnterpriseOnboardingReports(
@@ -341,10 +361,8 @@ export async function submitEnterpriseOnboardingReports(
   slug: string,
   body: EnterpriseReportsSubmitPayload,
 ) {
+  // 空字符串表示同源相对路径 /api/...（推荐）；勿再要求必须为绝对 URL
   const base = (apiBaseUrl || "").replace(/\/$/, "");
-  if (!base) {
-    throw new Error("未配置测评 API 地址");
-  }
   const response = await fetch(
     `${base}/api/web/assessment-enterprises/${encodeURIComponent(slug)}/reports`,
     {

@@ -105,3 +105,20 @@ export function resolvePublicBaseUrl(): string {
   if (explicit) return stripSlash(explicit);
   return stripSlash(getBackendPreset().publicBaseUrl);
 }
+
+/**
+ * 浏览器侧测评 API 根地址。
+ * 返回空字符串表示「同源」：请求 /api/...，由 Next rewrite 转到本机 backend。
+ * 切勿把 resolveApiBaseUrl()（常为 127.0.0.1）直接交给浏览器。
+ */
+export function resolveBrowserApiBaseUrl(): string {
+  const explicit = [
+    process.env.NEXT_PUBLIC_ASSESSMENT_API_BASE_URL,
+    process.env.NEXT_PUBLIC_API_BASE_URL,
+  ]
+    .map((v) => (v || "").trim())
+    .find(Boolean);
+  if (explicit) return stripSlash(explicit);
+  // 默认同源 + rewrite（推荐）
+  return "";
+}

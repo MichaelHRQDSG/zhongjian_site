@@ -75,15 +75,19 @@ vim config/corp-env/.env.dev   # 或 nano / code 等
 | `CORP_PUBLIC_ORIGIN` / `NEXT_PUBLIC_CORP_PUBLIC_ORIGIN` | 本环境对外站点根 URL |
 | `PORT` | Next 监听端口（须与 nginx upstream 一致） |
 | `HOSTNAME` | 绑定地址（现网用 `127.0.0.1`） |
-| `VITE_API_BASE_URL` | 测评/企业定制 API 根地址（团队约定名；运行时映射为 `ASSESSMENT_API_BASE_URL`） |
-| `ASSESSMENT_API_BASE_URL` / `MINI_API_BASE_URL` | 与上面保持一致即可 |
-| `MINI_PUBLIC_BASE_URL` | 对应小程序/EAP 公网页根（资源、上传等） |
+| `VITE_API_BASE_URL` | 测评/企业定制 API 根地址（团队约定名；运行时映射为 `ASSESSMENT_API_BASE_URL`；**仅服务端与 rewrite 目标**） |
+| `ASSESSMENT_API_BASE_URL` / `MINI_API_BASE_URL` | 与上面保持一致即可（一般为 `http://127.0.0.1:19x00`） |
+| `MINI_PUBLIC_BASE_URL` | 对应小程序/EAP 公网页根（logo 等静态资源） |
+| `NEXT_PUBLIC_ASSESSMENT_API_BASE_URL` | 可选；浏览器直连公网 API 时才设。默认不设：浏览器走同源 `/api/*`，由 Next rewrite 转发 |
 | `BACKEND_ENV` | 后台环境代称（`eap` / `test` / `production`） |
+
+**提交答卷：** 勿把 `127.0.0.1` 注给浏览器。构建时 `next.config` 会把 `/api/*`、`/static/*` rewrite 到本机 `ASSESSMENT_API_BASE_URL`。
 
 **注意事项：**
 
 - 改 `PORT` 后必须同步改 nginx 反代目标，否则公网打不开。
 - 改 `VITE_API_BASE_URL` 等于换答卷写入的后台库；**切勿把 prod 指到 dev API**，反之亦然。
+- **勿把 `127.0.0.1` 注给浏览器**；答卷默认走同源 `/api/*` + Next rewrite。
 - `NEXT_PUBLIC_*` 会进入前端打包产物，**仅重启进程不够**，必须重新 build（见第 4 步）。
 
 ---
