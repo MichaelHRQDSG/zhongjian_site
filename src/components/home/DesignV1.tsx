@@ -11,7 +11,7 @@ import MobileNav from '@/components/layout/MobileNav';
 import type { ThemeTweaks } from '@/lib/tokens';
 import type { SiteBranding } from '@/lib/enterprise-assessments';
 import { MOCK_COUNSELORS, type CounselorCard } from '@/lib/counselors';
-import { getCounselorSlug } from '@/lib/counselor-profiles';
+import { counselorPublicSlug } from '@/lib/counselor-profiles';
 import {
   enterpriseSlugFromHomeHref,
   withEnterpriseQuery,
@@ -491,8 +491,11 @@ const DesignV1 = ({
 
           {/* 咨询师团队 —— 卡片横排（模拟数据或 production 真实数据） */}
           <div className="gxa-counselors" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20, marginTop: 24 }}>
+            {counselorList.length === 0 && (
+              <p style={{ gridColumn: '1 / -1', margin: 0, fontSize: 14, color: '#8B96A8' }}>暂无咨询师</p>
+            )}
             {counselorList.map((c, i) => (
-              <a key={`${c.name}-${i}`} href={siteLink(`/counselors/${getCounselorSlug(c.name)}`)} style={{
+              <a key={c.slug || c.accountId || `${c.name}-${i}`} href={siteLink(`/counselors/${counselorPublicSlug(c)}`)} style={{
                 background: '#fff', border: '1px solid #E8ECF3', padding: 28, borderRadius: 6,
                 textAlign: 'center', transition: 'all .3s', textDecoration: 'none', color: 'inherit', display: 'block',
               }} className="counselor-card">

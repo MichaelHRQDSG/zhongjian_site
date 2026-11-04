@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 import DesignV1 from "@/components/home/DesignV1";
 import { fetchEnterpriseAssessments } from "@/lib/enterprise-assessments";
 import { articlesFromApi, ARTICLES } from "@/lib/articles";
-import { getCounselorsForHome } from "@/lib/counselors";
+import { getCounselorsForEnterpriseHome } from "@/lib/counselors";
 
 export async function generateMetadata({
   params,
@@ -26,7 +26,7 @@ export default async function EnterpriseHomePage({
   const { slug } = await params;
   const [branding, counselors] = await Promise.all([
     fetchEnterpriseAssessments(slug),
-    getCounselorsForHome(),
+    getCounselorsForEnterpriseHome(slug),
   ]);
   if (!branding) notFound();
 

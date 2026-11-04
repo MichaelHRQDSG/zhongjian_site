@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { CounselorsIndexPage } from '@/components/counselors/CounselorsIndexPage';
-import { getCounselorProfilesForList } from '@/lib/counselor-profiles';
+import { getCounselorProfilesForList, getEnterpriseCounselorProfiles } from '@/lib/counselor-profiles';
 import { fetchDefaultBranding, fetchEnterpriseAssessments } from '@/lib/enterprise-assessments';
 import { resolveEnterpriseNav } from '@/lib/enterprise-context';
 
@@ -20,15 +20,16 @@ export default async function CounselorsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const [branding, counselors] = await Promise.all([
-    fetchDefaultBranding(),
-    getCounselorProfilesForList(),
-  ]);
   const nav = resolveEnterpriseNav(await searchParams);
-  if (nav.enterpriseSlug) {
-    const enterprise = await fetchEnterpriseAssessments(nav.enterpriseSlug);
-    if (enterprise?.hideConsultation) redirect(nav.homeHref);
-  }
+  const [defaultBranding, enterprise, counselors] = await Promise.all([
+    fetchDefaultBranding(),
+    nav.enterpriseSlug ? fetchEnterpriseAssessments(nav.enterpriseSlug) : Promise.resolve(undefined),
+    nav.enterpriseSlug
+      ? getEnterpriseCounselorProfiles(nav.enterpriseSlug)
+      : getCounselorProfilesForList(),
+  ]);
+  if (enterprise?.hideConsultation) redirect(nav.homeHref);
+  const branding = enterprise || defaultBranding;
   return (
     <CounselorsIndexPage
       counselors={counselors}

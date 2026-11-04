@@ -43,6 +43,9 @@ export function CounselorsIndexPage({
           浏览完整咨询师列表，了解擅长方向与从业背景。选定方向后，可通过「联系助理」完成预约。
         </p>
 
+        {counselors.length === 0 ? (
+          <p style={{ marginTop: 36, fontSize: 15, color: '#8B96A8' }}>暂无咨询师</p>
+        ) : (
         <div style={{ marginTop: 36, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 18 }} className="counselor-list-grid">
           {counselors.map((c) => (
             <Link
@@ -82,6 +85,7 @@ export function CounselorsIndexPage({
             </Link>
           ))}
         </div>
+        )}
 
         <div style={{ marginTop: 40, textAlign: 'center' }}>
           <Link href={contactHref} style={{

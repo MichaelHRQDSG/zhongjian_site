@@ -52,9 +52,6 @@ export function CounselorDetailPage({
           <div>
             <h1 style={{ margin: 0, fontSize: 32, fontFamily: '"Noto Serif SC", serif', color: '#0F2E5F', letterSpacing: 1 }}>{counselor.name}</h1>
             <div style={{ marginTop: 8, fontSize: 15, color: '#4A5A78' }}>{counselor.title}</div>
-            {counselor.education && (
-              <div style={{ marginTop: 6, fontSize: 13, color: '#8B96A8' }}>{counselor.education}</div>
-            )}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 14 }}>
               {counselor.tags.map((t) => (
                 <span key={t} style={{ fontSize: 12, color: primary, background: `${primary}0C`, padding: '3px 10px', borderRadius: 3 }}>{t}</span>
@@ -66,22 +63,14 @@ export function CounselorDetailPage({
         <div style={{ marginTop: 28, display: 'flex', gap: 28, flexWrap: 'wrap', fontSize: 13, color: '#4A5A78', paddingBottom: 28, borderBottom: '1px solid #E8ECF3' }}>
           <span>执业 {counselor.years}</span>
           <span>{counselor.cases} {counselor.casesUnit || '案例'}</span>
-          {counselor.languages?.length ? <span>语言 {counselor.languages.join(' / ')}</span> : null}
         </div>
 
-        <section style={{ marginTop: 32 }}>
-          <h2 style={h2Style}>咨询取向</h2>
-          <p style={pStyle}>{counselor.approach}</p>
-        </section>
-
-        <section style={{ marginTop: 28 }}>
-          <h2 style={h2Style}>个人介绍</h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {counselor.bio.map((para, i) => (
-              <p key={i} style={pStyle}>{para}</p>
-            ))}
-          </div>
-        </section>
+        <CopySection title="简介" text={counselor.introduce} />
+        <CopySection title="从业资质" text={counselor.qualification} />
+        <CopySection title="咨询流派" text={counselor.specialty} />
+        <CopySection title="咨询领域" text={counselor.field} />
+        <CopySection title="受训背景" text={counselor.trainingExperience} />
+        <CopySection title="擅长人群" text={counselor.targetGroup} />
 
         <div style={{ marginTop: 40, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           <Link href={contactHref} style={{
@@ -99,6 +88,27 @@ export function CounselorDetailPage({
         </div>
       </main>
     </div>
+  );
+}
+
+function CopySection({ title, text }: { title: string; text?: string }) {
+  const paragraphs = String(text || '')
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return (
+    <section style={{ marginTop: 28 }}>
+      <h2 style={h2Style}>{title}</h2>
+      {paragraphs.length === 0 ? (
+        <p style={pStyle}>暂无</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {paragraphs.map((para, index) => (
+            <p key={index} style={pStyle}>{para}</p>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 

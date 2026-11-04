@@ -18,7 +18,25 @@ export type CounselorCard = {
   /** 右侧指标单位：模拟数据用「案例」，真实数据用「小时」 */
   casesUnit?: string;
   avatarUrl?: string;
+  /** 咨询师账号 ID。企业勾选和介绍页都用它，不用姓名。 */
+  accountId?: number;
+  slug?: string;
+  /** 简介，对应主档 Introduce；企业页可能已叠过本企业文案 */
+  introduce?: string;
+  /** 从业资质，对应主档 Qualification */
+  qualification?: string;
+  /** 咨询流派全文，对应主档 Specialty。卡片上的短标签仍用 tags */
+  specialtyText?: string;
+  /** 咨询领域全文，对应主档 Field */
+  fieldText?: string;
+  /** 受训背景，对应主档 TrainingExperience。主档该栏为空时才回退旧的 Career */
+  trainingExperience?: string;
+  /** 擅长人群，对应主档 TargetGroup */
+  targetGroup?: string;
 };
+
+/** 定制企业首页只展示前 4 位，其余在「了解更多」。 */
+export const ENTERPRISE_HOME_COUNSELOR_LIMIT = 4;
 
 export type CounselorsSource = 'real' | 'mock';
 
@@ -96,6 +114,22 @@ function absoluteMediaUrl(path: unknown, apiBase: string): string | undefined {
   return `${publicOrigin}${value.startsWith('/') ? value : `/${value}`}`;
 }
 
+function textField(row: Record<string, unknown>, ...keys: string[]): string {
+  for (const key of keys) {
+    if (row[key] == null) continue;
+    const value = String(row[key]).trim();
+    if (value) return value;
+  }
+  return '';
+}
+
+/** 字段在响应里出现过（含空字符串）就用它，避免企业清空文案后又显示主档旧栏。 */
+function explicitText(row: Record<string, unknown>, key: string, pascal: string, ...legacy: string[]): string {
+  if (row[key] != null) return String(row[key]).trim();
+  if (row[pascal] != null) return String(row[pascal]).trim();
+  return legacy.length ? textField(row, ...legacy) : '';
+}
+
 function mapProductionItem(row: Record<string, unknown>, apiBase: string): CounselorCard {
   const name = String(row.name || row.Name || '咨询师').trim() || '咨询师';
   const title =
@@ -108,6 +142,9 @@ function mapProductionItem(row: Record<string, unknown>, apiBase: string): Couns
   const hours = Number(row.consultHours ?? row.ConsultHours ?? 0);
   const cases = hours > 0 ? `${hours}+` : '—';
   const tags = splitTags(row.field || row.Field || row.specialty || row.Specialty);
+  const accountIdRaw = Number(row.accountId ?? row.id ?? row.Id ?? 0);
+  const accountId = Number.isFinite(accountIdRaw) && accountIdRaw > 0 ? Math.trunc(accountIdRaw) : undefined;
+  const slug = String(row.slug || (accountId ? `c-${accountId}` : '')).trim() || undefined;
   return {
     name,
     title: title.length > 24 ? `${title.slice(0, 24)}…` : title,
@@ -116,7 +153,25 @@ function mapProductionItem(row: Record<string, unknown>, apiBase: string): Couns
     cases,
     casesUnit: '小时',
     avatarUrl: absoluteMediaUrl(row.avatarUrl || row.AvatarUrl, apiBase),
+    accountId,
+    slug,
+    introduce: explicitText(row, 'introduce', 'Introduce'),
+    qualification: explicitText(row, 'qualification', 'Qualification'),
+    specialtyText: explicitText(row, 'specialty', 'Specialty'),
+    fieldText: explicitText(row, 'field', 'Field'),
+    trainingExperience: explicitText(row, 'trainingExperience', 'TrainingExperience', 'career', 'Career'),
+    targetGroup: explicitText(row, 'targetGroup', 'TargetGroup'),
   };
+}
+
+function readCounselorItems(body: Record<string, unknown>): unknown[] {
+  const nested = body.data;
+  const nestedItems =
+    nested && typeof nested === 'object' && !Array.isArray(nested)
+      ? (nested as Record<string, unknown>).items
+      : undefined;
+  const itemsRaw = body.items || nestedItems || [];
+  return Array.isArray(itemsRaw) ? itemsRaw : [];
 }
 
 function mockResult(): HomeCounselorsResult {
@@ -171,9 +226,7 @@ export async function fetchCounselors(
       return emptyRealResult();
     }
     const body = (await res.json()) as Record<string, unknown>;
-    const itemsRaw = (body.items ||
-      (body.data as Record<string, unknown> | undefined)?.items ||
-      []) as unknown[];
+    const itemsRaw = readCounselorItems(body);
     if (!Array.isArray(itemsRaw) || itemsRaw.length === 0) {
       console.warn('[counselors] production API returned empty list');
       return emptyRealResult();
@@ -201,4 +254,49 @@ export async function getCounselorsForList(): Promise<HomeCounselorsResult> {
   return fetchCounselors({
     limit: parseLimit(process.env.COUNSELORS_LIST_FETCH_LIMIT, 50, 100),
   });
+}
+
+/**
+ * 这家企业前台的咨询师。
+ * 请求打到与企业配置相同的后端（ASSESSMENT_API_BASE_URL / BACKEND_ENV）。
+ * 每个环境的这个地址要指到该环境自己的后端，勾选结果放在企业配置里，不放环境变量。
+ */
+export async function getEnterpriseCounselors(slug: string): Promise<HomeCounselorsResult> {
+  noStore();
+  const apiBase = resolveApiBaseUrl({ preferAssessment: true });
+  const url = `${apiBase}/api/web/assessment-enterprises/${encodeURIComponent(slug)}/counselors`;
+  try {
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+    });
+    if (!res.ok) {
+      console.error('[counselors] enterprise API HTTP', res.status, url);
+      return emptyRealResult();
+    }
+    const body = (await res.json()) as Record<string, unknown>;
+    const items = readCounselorItems(body)
+      .filter((row): row is Record<string, unknown> => !!row && typeof row === 'object')
+      .map((row) => mapProductionItem(row, apiBase));
+    const nested = body.data;
+    const nestedTotal =
+      nested && typeof nested === 'object' && !Array.isArray(nested)
+        ? (nested as Record<string, unknown>).total
+        : undefined;
+    const total = Number(body.total ?? nestedTotal ?? items.length) || items.length;
+    return { items, total, source: 'real' };
+  } catch (err) {
+    console.error('[counselors] enterprise fetch failed', err);
+    return emptyRealResult();
+  }
+}
+
+/** 定制企业首页只取已勾选名单的前 4 位。 */
+export async function getCounselorsForEnterpriseHome(slug: string): Promise<HomeCounselorsResult> {
+  const all = await getEnterpriseCounselors(slug);
+  return {
+    ...all,
+    items: all.items.slice(0, ENTERPRISE_HOME_COUNSELOR_LIMIT),
+  };
 }

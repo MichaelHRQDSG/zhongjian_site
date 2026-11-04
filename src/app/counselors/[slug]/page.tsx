@@ -13,15 +13,18 @@ export function generateStaticParams() {
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const counselor = await getCounselorBySlug(slug);
+  const nav = resolveEnterpriseNav(await searchParams);
+  const counselor = await getCounselorBySlug(slug, nav.enterpriseSlug);
   if (!counselor) return {};
   return {
     title: `${counselor.name} · 咨询师介绍`,
-    description: counselor.approach,
+    description: counselor.introduce,
   };
 }
 
@@ -33,16 +36,15 @@ export default async function CounselorSlugPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { slug } = await params;
-  const [counselor, branding] = await Promise.all([
-    getCounselorBySlug(slug),
-    fetchDefaultBranding(),
-  ]);
-  if (!counselor) notFound();
   const nav = resolveEnterpriseNav(await searchParams);
-  if (nav.enterpriseSlug) {
-    const enterprise = await fetchEnterpriseAssessments(nav.enterpriseSlug);
-    if (enterprise?.hideConsultation) redirect(nav.homeHref);
-  }
+  const [counselor, defaultBranding, enterprise] = await Promise.all([
+    getCounselorBySlug(slug, nav.enterpriseSlug),
+    fetchDefaultBranding(),
+    nav.enterpriseSlug ? fetchEnterpriseAssessments(nav.enterpriseSlug) : Promise.resolve(undefined),
+  ]);
+  if (enterprise?.hideConsultation) redirect(nav.homeHref);
+  if (!counselor) notFound();
+  const branding = enterprise || defaultBranding;
 
   return (
     <CounselorDetailPage
