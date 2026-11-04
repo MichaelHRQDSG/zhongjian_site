@@ -5,6 +5,14 @@ import React from 'react';
 import { Icon } from '@/components/shared/data';
 import { SiteBeian } from '@/components/shared/SiteBeian';
 import { submitEnterpriseOnboardingReports } from '@/lib/enterprise-assessments';
+import {
+  getOnboardingQuestionInputType,
+  isDynamicQuestionAnswered,
+  isOnboardingQuestionRequired,
+  onboardingFollowUpValue,
+  selectedOnboardingOptionId,
+  serializeDynamicQuestionAnswer,
+} from '@/lib/onboarding-answers';
 import type { ThemeTweaks } from '@/lib/tokens';
 
 // 员工心理测评 · 完整流程页面
@@ -193,13 +201,18 @@ const OnboardingAssessment = ({
   const goto = (s) => { setStep(s); window.scrollTo({ top: 0, behavior: 'smooth' }); };
 
   const setScaleAnswer = React.useCallback((scaleId, questionKey, value) => {
-    setAnswersByScale((current) => ({
-      ...current,
-      [scaleId]: {
-        ...(current[scaleId] || {}),
-        [questionKey]: value,
-      },
-    }));
+    setAnswersByScale((current) => {
+      const nextForScale = { ...(current[scaleId] || {}) };
+      if (value === undefined) {
+        delete nextForScale[questionKey];
+      } else {
+        nextForScale[questionKey] = value;
+      }
+      return {
+        ...current,
+        [scaleId]: nextForScale,
+      };
+    });
   }, []);
 
   const openScale = React.useCallback((scaleId) => {
@@ -220,6 +233,13 @@ const OnboardingAssessment = ({
     (scale.items || []).forEach((item, index) => {
       const questionId = item?.id || String(index);
       const value = raw[questionId] ?? raw[index];
+      if (scale?.scale === 'dynamic' && item && typeof item === 'object') {
+        const serialized = serializeDynamicQuestionAnswer(item, value);
+        if (serialized !== undefined) {
+          answers[questionId] = serialized;
+        }
+        return;
+      }
       if (value != null && value !== '') {
         answers[questionId] = String(value);
       }
@@ -238,7 +258,17 @@ const OnboardingAssessment = ({
     if (!activeScale?.id || submittingRef.current) return;
     const scale = activeScale;
     const answers = buildAnswersForScale(scale);
-    if (Object.keys(answers).length === 0) {
+    if (scale.scale === 'dynamic') {
+      const missingRequired = (scale.items || []).find((item, index) => {
+        if (!item || !isOnboardingQuestionRequired(item)) return false;
+        const questionId = item.id || String(index);
+        return answers[questionId] === undefined;
+      });
+      if (missingRequired) {
+        setSubmitError(`请先完成题目：${missingRequired.text || missingRequired.id}`);
+        return;
+      }
+    } else if (Object.keys(answers).length === 0) {
       setSubmitError('请先完成量表作答');
       return;
     }
@@ -1137,12 +1167,21 @@ const StepScale = ({
   const scaleId = scale?.id || 'scale';
   const answers = answersByScale[scaleId] || {};
   const answerKey = (item, i) => (scale?.scale === 'dynamic' && item?.id != null ? item.id : i);
-  const answered = (scale?.items || []).filter((item, i) => {
+  const isItemAnswered = (item, i) => {
     const key = answerKey(item, i);
-    return answers[key] != null && answers[key] !== '';
-  }).length;
+    const val = answers[key];
+    if (scale?.scale === 'dynamic' && item && typeof item === 'object') {
+      return isDynamicQuestionAnswered(item, val);
+    }
+    return val != null && val !== '';
+  };
+  const answered = (scale?.items || []).filter(isItemAnswered).length;
   const demoTotal = Math.max(Number(scale?.demoTotal) || (scale?.items || []).length || 0, 1);
-  const isComplete = answered >= demoTotal;
+  const isComplete = scale?.scale === 'dynamic'
+    ? (scale?.items || []).length > 0 && (scale?.items || []).every(
+      (item, i) => !isOnboardingQuestionRequired(item) || isItemAnswered(item, i),
+    )
+    : answered >= demoTotal;
   const setAns = (item, i, v) => setScaleAnswer(scaleId, answerKey(item, i), v);
 
   if (!scale) {
@@ -1177,6 +1216,15 @@ const StepScale = ({
           {(scale.items || []).map((item, i) => {
             const qKey = answerKey(item, i);
             const selected = answers[qKey];
+            const inputType = scale.scale === 'dynamic'
+              ? getOnboardingQuestionInputType(item)
+              : 'choice';
+            const selectedOptionId = selectedOnboardingOptionId(selected);
+            const selectedOption = scale.scale === 'dynamic' && inputType === 'choice'
+              ? (item.options || []).find((opt, oi) => (opt.id || oi) === selectedOptionId)
+              : null;
+            const followUp = selectedOption?.followUp;
+            const followUpVal = onboardingFollowUpValue(selected);
             const optionCount = Math.min((item.options || []).length || 1, 5);
             return (
             <div key={item?.id || i} style={{ padding: '20px 16px 24px', background: '#FBFAF7', borderRadius: 6 }}>
@@ -1185,7 +1233,12 @@ const StepScale = ({
                   {i + 1}
                 </div>
                 {scale.scale === 'dynamic' ? (
-                  <div className="gxa-scale-question-text" style={{ flex: 1, minWidth: 0, fontSize: 15, color: '#0F2E5F', lineHeight: 1.7, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{item.text}</div>
+                  <div className="gxa-scale-question-text" style={{ flex: 1, minWidth: 0, fontSize: 15, color: '#0F2E5F', lineHeight: 1.7, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                    {item.text}
+                    {!isOnboardingQuestionRequired(item) ? (
+                      <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 400, color: '#8B96A8' }}>选填</span>
+                    ) : null}
+                  </div>
                 ) : scale.scale === 'binary' ? (
                   <div className="gxa-scale-question-text" style={{ flex: 1, minWidth: 0, fontSize: 15, color: '#0F2E5F', lineHeight: 1.7 }}>请选择更符合你的选项</div>
                 ) : (
@@ -1193,25 +1246,141 @@ const StepScale = ({
                 )}
               </div>
 
-              {scale.scale === 'dynamic' ? (
-                <div
-                  className="gxa-scale-options"
-                  style={{ display: 'grid', gridTemplateColumns: `repeat(${optionCount}, minmax(0, 1fr))`, gap: 8, paddingLeft: 38 }}
-                >
-                  {(item.options || []).map((option, oi) => (
-                    <button key={option.id || oi} type="button" onClick={() => setAns(item, i, option.id || oi)} style={{
-                      padding: '12px 8px', textAlign: 'center',
-                      background: selected === (option.id || oi) ? primary : '#fff',
-                      color: selected === (option.id || oi) ? '#fff' : '#4A5A78',
-                      border: selected === (option.id || oi) ? `1.5px solid ${primary}` : '1.5px solid #E8ECF3',
-                      borderRadius: 4, cursor: 'pointer', fontSize: 13,
-                      whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'anywhere', lineHeight: 1.45,
-                      minWidth: 0,
-                    }}>
-                      {option.label || option.text}
-                    </button>
-                  ))}
+              {scale.scale === 'dynamic' && inputType === 'text' ? (
+                <div style={{ paddingLeft: 38 }}>
+                  <textarea
+                    rows={3}
+                    placeholder={item.helpText || '请填写'}
+                    minLength={item.validation?.minLength}
+                    maxLength={item.validation?.maxLength}
+                    value={selected && typeof selected === 'object' && 'text' in selected ? selected.text : ''}
+                    onChange={(event) => {
+                      const text = event.target.value;
+                      setAns(item, i, text.trim() ? { text } : undefined);
+                    }}
+                    style={{
+                      width: '100%', boxSizing: 'border-box', padding: '12px 14px',
+                      background: '#fff', border: '1.5px solid #E8ECF3', borderRadius: 4,
+                      fontSize: 14, color: '#1A2846', lineHeight: 1.6, fontFamily: 'inherit',
+                      resize: 'vertical', outline: 'none',
+                    }}
+                  />
                 </div>
+              ) : scale.scale === 'dynamic' && inputType === 'number' ? (
+                <div style={{ paddingLeft: 38 }}>
+                  <input
+                    type="number"
+                    placeholder={item.helpText || '请填写数字'}
+                    min={item.validation?.min}
+                    max={item.validation?.max}
+                    value={
+                      selected && typeof selected === 'object' && 'number' in selected && Number.isFinite(selected.number)
+                        ? selected.number
+                        : ''
+                    }
+                    onChange={(event) => {
+                      const raw = event.target.value;
+                      if (raw === '') {
+                        setAns(item, i, undefined);
+                        return;
+                      }
+                      const parsed = Number(raw);
+                      setAns(item, i, Number.isFinite(parsed) ? { number: parsed } : undefined);
+                    }}
+                    style={{
+                      width: '100%', maxWidth: 280, boxSizing: 'border-box', height: 42, padding: '0 14px',
+                      background: '#fff', border: '1.5px solid #E8ECF3', borderRadius: 4,
+                      fontSize: 14, color: '#1A2846', fontFamily: 'inherit', outline: 'none',
+                    }}
+                  />
+                </div>
+              ) : scale.scale === 'dynamic' ? (
+                <>
+                  <div
+                    className="gxa-scale-options"
+                    style={{ display: 'grid', gridTemplateColumns: `repeat(${optionCount}, minmax(0, 1fr))`, gap: 8, paddingLeft: 38 }}
+                  >
+                    {(item.options || []).map((option, oi) => {
+                      const optId = option.id || oi;
+                      const isOptionSelected = selectedOptionId === optId;
+                      return (
+                        <button
+                          key={optId}
+                          type="button"
+                          onClick={() => {
+                            if (option.followUp) {
+                              setAns(item, i, {
+                                optionId: String(optId),
+                                followUp: isOptionSelected ? followUpVal : undefined,
+                              });
+                              return;
+                            }
+                            setAns(item, i, optId);
+                          }}
+                          style={{
+                            padding: '12px 8px', textAlign: 'center',
+                            background: isOptionSelected ? primary : '#fff',
+                            color: isOptionSelected ? '#fff' : '#4A5A78',
+                            border: isOptionSelected ? `1.5px solid ${primary}` : '1.5px solid #E8ECF3',
+                            borderRadius: 4, cursor: 'pointer', fontSize: 13,
+                            whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'anywhere', lineHeight: 1.45,
+                            minWidth: 0,
+                          }}
+                        >
+                          {option.label || option.text}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {followUp ? (
+                    <div style={{ marginTop: 12, marginLeft: 38, padding: '12px 14px', background: '#fff', border: '1px dashed #D0D6E0', borderRadius: 4 }}>
+                      <div style={{ marginBottom: 8, fontSize: 12, color: '#4A5A78' }}>
+                        {followUp.label || '请补充填写'}
+                        {followUp.required ? '（必填）' : ''}
+                      </div>
+                      {followUp.inputType === 'number' ? (
+                        <input
+                          type="number"
+                          min={followUp.validation?.min}
+                          max={followUp.validation?.max}
+                          value={typeof followUpVal === 'number' && Number.isFinite(followUpVal) ? followUpVal : ''}
+                          onChange={(event) => {
+                            const raw = event.target.value;
+                            const parsed = Number(raw);
+                            setAns(item, i, {
+                              optionId: String(selectedOptionId),
+                              followUp: raw === '' || !Number.isFinite(parsed) ? undefined : parsed,
+                            });
+                          }}
+                          style={{
+                            width: '100%', maxWidth: 260, boxSizing: 'border-box', height: 38, padding: '0 12px',
+                            background: '#fff', border: '1.5px solid #E8ECF3', borderRadius: 4,
+                            fontSize: 13, color: '#1A2846', fontFamily: 'inherit', outline: 'none',
+                          }}
+                        />
+                      ) : (
+                        <input
+                          type="text"
+                          minLength={followUp.validation?.minLength}
+                          maxLength={followUp.validation?.maxLength}
+                          value={typeof followUpVal === 'string' ? followUpVal : ''}
+                          onChange={(event) => {
+                            const raw = event.target.value;
+                            setAns(item, i, {
+                              optionId: String(selectedOptionId),
+                              followUp: raw === '' ? undefined : raw,
+                            });
+                          }}
+                          style={{
+                            width: '100%', boxSizing: 'border-box', height: 38, padding: '0 12px',
+                            background: '#fff', border: '1.5px solid #E8ECF3', borderRadius: 4,
+                            fontSize: 13, color: '#1A2846', fontFamily: 'inherit', outline: 'none',
+                          }}
+                        />
+                      )}
+                    </div>
+                  ) : null}
+                </>
               ) : scale.scale === 'binary' ? (
                 <div className="gxa-scale-options-binary" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   {[item.a, item.b].map((opt, oi) => (

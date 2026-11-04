@@ -30,6 +30,32 @@ export interface CustomEmployeeInfoField {
   label: string;
 }
 
+export type EnterpriseQuestionInputType = "choice" | "text" | "number";
+export type EnterpriseScoreMode = "filled" | "value";
+
+export interface EnterpriseQuestionValidation {
+  min?: number;
+  max?: number;
+  minLength?: number;
+  maxLength?: number;
+}
+
+export interface EnterpriseOptionFollowUp {
+  inputType: "text" | "number";
+  label?: string;
+  required?: boolean;
+  scoreMode?: EnterpriseScoreMode;
+  completedScore?: number;
+  emptyScore?: number;
+  validation?: EnterpriseQuestionValidation;
+}
+
+export type EnterpriseAnswerValue =
+  | string
+  | { optionId: string; followUp?: string | number }
+  | { text: string }
+  | { number: number };
+
 export interface EnterpriseAssessmentPayload extends SiteBranding {
   slug: string;
   loginRequired?: boolean;
@@ -53,7 +79,19 @@ export interface EnterpriseAssessmentPayload extends SiteBranding {
     questions: Array<{
       id: string;
       text: string;
-      options: Array<{ id: string; text: string }>;
+      helpText?: string;
+      required?: boolean;
+      inputType?: EnterpriseQuestionInputType;
+      scoreMode?: EnterpriseScoreMode;
+      completedScore?: number;
+      emptyScore?: number;
+      validation?: EnterpriseQuestionValidation;
+      options: Array<{
+        id: string;
+        text: string;
+        value?: number;
+        followUp?: EnterpriseOptionFollowUp;
+      }>;
     }>;
   }>;
 }
@@ -62,7 +100,7 @@ export interface EnterpriseReportSubmitItem {
   clientSubmissionId: string;
   assessmentId: string;
   assessmentVersion: number;
-  answers: Record<string, string>;
+  answers: Record<string, EnterpriseAnswerValue>;
 }
 
 export interface EnterpriseReportsSubmitPayload {
@@ -335,6 +373,13 @@ export function toOnboardingScales(payload: EnterpriseAssessmentPayload) {
       items: questions.map((question) => ({
         id: question.id,
         text: question.text,
+        helpText: question.helpText || "",
+        required: question.required !== false,
+        inputType: (question.inputType || "choice") as EnterpriseQuestionInputType,
+        scoreMode: question.scoreMode,
+        completedScore: question.completedScore,
+        emptyScore: question.emptyScore,
+        validation: question.validation,
         options: (Array.isArray(question.options) ? question.options : []).map((option) => ({
           ...option,
           label: option.text,
