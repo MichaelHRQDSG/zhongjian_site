@@ -111,6 +111,19 @@ const OnboardingAssessment = ({
     () => reportScales.reduce((sum, scale) => sum + (Array.isArray(scale?.items) ? scale.items.length : Number(scale?.total) || 0), 0),
     [reportScales],
   );
+  const resultPageIndex = React.useMemo(() => {
+    const idx = activeScales.findIndex((s) => s?.id === activeScaleId);
+    return idx >= 0 ? idx : 0;
+  }, [activeScales, activeScaleId]);
+  const resultPageTotal = activeScales.length;
+  /** 提交当前量表后，是否还有未完成的量表（用于按钮文案与跳转） */
+  const hasMoreScalesAfterSubmit = React.useMemo(() => {
+    if (!activeScaleId || activeScales.length <= 1) return false;
+    const doneAfter = new Set(completedScaleIds);
+    doneAfter.add(activeScaleId);
+    return activeScales.some((s) => s?.id && !doneAfter.has(s.id));
+  }, [activeScaleId, activeScales, completedScaleIds]);
+  const scaleSubmitLabel = hasMoreScalesAfterSubmit ? '继续作答 →' : '提交作答结果 →';
 
   React.useEffect(() => {
     try {
@@ -227,6 +240,19 @@ const OnboardingAssessment = ({
     goto('scaleResult');
   }, []);
 
+  const goToResultPage = React.useCallback((direction) => {
+    if (!activeScales.length) return;
+    const currentIdx = activeScales.findIndex((s) => s?.id === activeScaleId);
+    const base = currentIdx >= 0 ? currentIdx : 0;
+    const nextIdx = direction === 'prev' ? base - 1 : base + 1;
+    if (nextIdx < 0 || nextIdx >= activeScales.length) return;
+    const next = activeScales[nextIdx];
+    if (!next?.id) return;
+    setActiveScaleId(next.id);
+    setSubmitError('');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [activeScaleId, activeScales]);
+
   const buildAnswersForScale = React.useCallback((scale) => {
     const raw = answersByScale[scale.id] || {};
     const answers = {};
@@ -253,6 +279,36 @@ const OnboardingAssessment = ({
       setResultsByScale((prev) => ({ ...prev, [scaleId]: reportPayload }));
     }
   }, []);
+
+  /** 当前量表提交成功后：还有未完成则进入下一张，全部完成才进结果页 */
+  const advanceAfterScaleSubmit = React.useCallback((scaleId) => {
+    const doneAfter = new Set(completedScaleIds);
+    doneAfter.add(scaleId);
+    const currentIdx = activeScales.findIndex((s) => s?.id === scaleId);
+    let next = null;
+    for (let i = currentIdx + 1; i < activeScales.length; i += 1) {
+      if (activeScales[i]?.id && !doneAfter.has(activeScales[i].id)) {
+        next = activeScales[i];
+        break;
+      }
+    }
+    if (!next) {
+      for (let i = 0; i < currentIdx; i += 1) {
+        if (activeScales[i]?.id && !doneAfter.has(activeScales[i].id)) {
+          next = activeScales[i];
+          break;
+        }
+      }
+    }
+    if (next?.id) {
+      setActiveScaleId(next.id);
+      setSubmitError('');
+      goto('scale');
+      return;
+    }
+    setActiveScaleId(scaleId);
+    goto('scaleResult');
+  }, [activeScales, completedScaleIds]);
 
   const handleSingleScaleSubmit = React.useCallback(async () => {
     if (!activeScale?.id || submittingRef.current) return;
@@ -294,7 +350,7 @@ const OnboardingAssessment = ({
         };
         setSubmitError('');
         markScaleCompleted(scale.id, mock);
-        goto('scaleResult');
+        advanceAfterScaleSubmit(scale.id);
         return;
       }
 
@@ -320,24 +376,18 @@ const OnboardingAssessment = ({
       };
       setSubmitError('');
       markScaleCompleted(scale.id, reportPayload);
-      goto('scaleResult');
+      advanceAfterScaleSubmit(scale.id);
     } catch (error) {
       const message = error instanceof Error ? error.message : '提交失败，请稍后重试';
       setSubmitError(message);
-      markScaleCompleted(scale.id, {
-        assessmentId: scale.id,
-        assessmentTitle: scale.name,
-        assessmentSubtitle: scale.subtitle,
-        resultSummary: '答卷保存失败。若下方有结果，仍可能来自本次本地计分返回。',
-        result: null,
-      });
-      goto('scaleResult');
+      // 提交失败不标记完成、不跳转，便于修正后重试
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
     }
   }, [
     activeScale,
+    advanceAfterScaleSubmit,
     apiBaseUrl,
     basicForm,
     buildAnswersForScale,
@@ -407,6 +457,7 @@ const OnboardingAssessment = ({
             setScaleAnswer={setScaleAnswer}
             submitting={submitting}
             submitError={submitError}
+            nextLabel={scaleSubmitLabel}
             onSubmit={handleSingleScaleSubmit}
             onBack={() => { setSubmitError(''); goto('select'); }}
           />
@@ -415,8 +466,8 @@ const OnboardingAssessment = ({
           <StepReport
             report={currentResult}
             scale={activeScale}
-            scales={reportScales}
-            assessmentCount={Math.max(reportScales.length, 1)}
+            scales={allDone ? activeScales : reportScales}
+            assessmentCount={Math.max(allDone ? activeScales.length : reportScales.length, 1)}
             questionCount={Math.max(reportQuestionCount, 1)}
             primary={primary}
             primaryDark={primaryDark}
@@ -426,6 +477,10 @@ const OnboardingAssessment = ({
             siteName={siteName}
             homeHref={homeHref}
             submitError={submitError}
+            resultPageIndex={resultPageIndex}
+            resultPageTotal={allDone ? resultPageTotal : 1}
+            onPrevResult={allDone && resultPageTotal > 1 ? () => goToResultPage('prev') : undefined}
+            onNextResult={allDone && resultPageTotal > 1 ? () => goToResultPage('next') : undefined}
             onBack={() => { setSubmitError(''); goto('select'); }}
           />
         )}
@@ -1036,7 +1091,9 @@ const StepScaleSelect = ({
       <StepIntro
         eyebrow="第 2 步 · 量表选择"
         title="选择要完成的量表"
-        desc="以下为本企业授权的测评量表。可按任意顺序作答；完成并提交后可查看该量表结果，再返回继续完成其余量表。"
+        desc={scales.length > 1
+          ? '以下为本企业授权的测评量表。多张量表将连续作答：非最后一张点「继续作答」进入下一张，全部完成后再统一查看作答结果。'
+          : '以下为本企业授权的测评量表。完成作答并提交后即可查看结果。'}
         meta={[`共 ${scales.length} 个量表`, `已完成 ${doneSet.size} 个`]}
         primary={primary}
       />
@@ -1047,8 +1104,16 @@ const StepScaleSelect = ({
           background: `${primary}0C`, border: `1px solid ${primary}30`,
           color: '#0F2E5F', fontSize: 14, lineHeight: 1.7,
         }}>
-          全部量表已完成。你可以继续查看任一量表结果，或
+          全部量表已完成。你可以翻页查看各量表结果，或
           <a href={homeHref} style={{ color: primary, marginLeft: 4, fontWeight: 600 }}>返回首页</a>。
+        </div>
+      ) : scales.length > 1 ? (
+        <div style={{
+          marginTop: 24, padding: '16px 18px', borderRadius: 8,
+          background: '#FBFAF7', border: '1px solid #E8ECF3',
+          color: '#4A5A78', fontSize: 14, lineHeight: 1.7,
+        }}>
+          作答结果将在全部 {scales.length} 张量表完成后统一展示。
         </div>
       ) : null}
 
@@ -1108,7 +1173,7 @@ const StepScaleSelect = ({
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
-                {done ? (
+                {allDone && done ? (
                   <button
                     type="button"
                     onClick={() => onViewResult(scale.id)}
@@ -1161,6 +1226,7 @@ const StepScale = ({
   setScaleAnswer,
   submitting,
   submitError,
+  nextLabel = '提交作答结果 →',
   onSubmit,
   onBack,
 }) => {
@@ -1453,7 +1519,7 @@ const StepScale = ({
         nextDisabled={!isComplete || submitting}
         primary={primary}
         backLabel="返回量表选择"
-        nextLabel={submitting ? '提交中…' : '提交本量表 →'}
+        nextLabel={submitting ? '提交中…' : nextLabel}
       />
     </div>
   );
@@ -1875,6 +1941,10 @@ const StepReport = ({
   siteName,
   homeHref,
   submitError,
+  resultPageIndex = 0,
+  resultPageTotal = 1,
+  onPrevResult,
+  onNextResult,
   onBack,
 }) => {
   const result = report?.result && typeof report.result === 'object' ? report.result : null;
@@ -1911,11 +1981,58 @@ const StepReport = ({
   const summaryText = report?.resultSummary || result?.summary || '';
   const isMatch = result?.type === 'match';
 
+  const showResultPager = resultPageTotal > 1
+    && (typeof onPrevResult === 'function' || typeof onNextResult === 'function');
+
   return (
     <div className="gxa-report-page" style={{ maxWidth: 1080, margin: '0 auto', width: '100%', boxSizing: 'border-box', overflowX: 'hidden' }}>
       {submitError ? (
         <div className="gxa-report-alert" style={{ marginBottom: 16, padding: '14px 18px', background: '#FFF6F4', border: '1px solid #F3C6C2', borderRadius: 6, color: '#8A2F2A', fontSize: 13, lineHeight: 1.7, wordBreak: 'break-word' }}>
           真实答卷未能完整保存到服务器（{submitError}）。若下方有结果，仍来自本次计分返回。
+        </div>
+      ) : null}
+
+      {showResultPager ? (
+        <div style={{
+          marginBottom: 16, padding: '14px 18px', borderRadius: 8,
+          background: '#fff', border: '1px solid #E8ECF3',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
+        }}>
+          <button
+            type="button"
+            onClick={onPrevResult}
+            disabled={resultPageIndex <= 0 || typeof onPrevResult !== 'function'}
+            style={{
+              background: resultPageIndex <= 0 ? '#F5F7FA' : '#fff',
+              color: resultPageIndex <= 0 ? '#A0AAB8' : '#0F2E5F',
+              border: '1px solid #E0E4EC',
+              padding: '10px 16px', borderRadius: 4, fontSize: 14, cursor: resultPageIndex <= 0 ? 'not-allowed' : 'pointer',
+            }}
+          >
+            ← 上一张结果
+          </button>
+          <div style={{ fontSize: 14, color: '#0F2E5F', fontWeight: 600, textAlign: 'center', flex: 1, minWidth: 140 }}>
+            作答结果 {resultPageIndex + 1} / {resultPageTotal}
+            {scale?.name ? (
+              <span style={{ display: 'block', marginTop: 4, fontSize: 13, fontWeight: 500, color: '#4A5A78' }}>
+                {scale.name}
+              </span>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={onNextResult}
+            disabled={resultPageIndex >= resultPageTotal - 1 || typeof onNextResult !== 'function'}
+            style={{
+              background: resultPageIndex >= resultPageTotal - 1 ? '#F5F7FA' : '#fff',
+              color: resultPageIndex >= resultPageTotal - 1 ? '#A0AAB8' : '#0F2E5F',
+              border: '1px solid #E0E4EC',
+              padding: '10px 16px', borderRadius: 4, fontSize: 14,
+              cursor: resultPageIndex >= resultPageTotal - 1 ? 'not-allowed' : 'pointer',
+            }}
+          >
+            下一张结果 →
+          </button>
         </div>
       ) : null}
 
@@ -2057,6 +2174,45 @@ const StepReport = ({
           ))}
         </div>
       </div>
+
+      {showResultPager ? (
+        <div style={{
+          marginTop: 28, padding: '14px 18px', borderRadius: 8,
+          background: '#fff', border: '1px solid #E8ECF3',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
+        }}>
+          <button
+            type="button"
+            onClick={onPrevResult}
+            disabled={resultPageIndex <= 0 || typeof onPrevResult !== 'function'}
+            style={{
+              background: resultPageIndex <= 0 ? '#F5F7FA' : '#fff',
+              color: resultPageIndex <= 0 ? '#A0AAB8' : '#0F2E5F',
+              border: '1px solid #E0E4EC',
+              padding: '10px 16px', borderRadius: 4, fontSize: 14, cursor: resultPageIndex <= 0 ? 'not-allowed' : 'pointer',
+            }}
+          >
+            ← 上一张结果
+          </button>
+          <div style={{ fontSize: 14, color: '#4A5A78', textAlign: 'center', flex: 1 }}>
+            {resultPageIndex + 1} / {resultPageTotal}
+          </div>
+          <button
+            type="button"
+            onClick={onNextResult}
+            disabled={resultPageIndex >= resultPageTotal - 1 || typeof onNextResult !== 'function'}
+            style={{
+              background: resultPageIndex >= resultPageTotal - 1 ? '#F5F7FA' : '#fff',
+              color: resultPageIndex >= resultPageTotal - 1 ? '#A0AAB8' : '#0F2E5F',
+              border: '1px solid #E0E4EC',
+              padding: '10px 16px', borderRadius: 4, fontSize: 14,
+              cursor: resultPageIndex >= resultPageTotal - 1 ? 'not-allowed' : 'pointer',
+            }}
+          >
+            下一张结果 →
+          </button>
+        </div>
+      ) : null}
 
       <div className="gxa-report-actions" style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 40, flexWrap: 'wrap' }}>
         {typeof onBack === 'function' ? (
