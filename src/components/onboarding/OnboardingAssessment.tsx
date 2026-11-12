@@ -7,6 +7,7 @@ import { SiteBeian } from '@/components/shared/SiteBeian';
 import { submitEnterpriseOnboardingReports } from '@/lib/enterprise-assessments';
 // 访客标识与知识库学习回传共用（localStorage `onb-visitor-{slug}`），后台据此把学习记录归到同一份员工档案
 import { createVisitorKey } from '@/lib/enterprise-learning';
+import { bandForScore, buildReportVisualModel, formatVisualScore } from '@/lib/report-visual-model';
 import {
   getOnboardingQuestionInputType,
   isDynamicQuestionAnswered,
@@ -1721,6 +1722,55 @@ const StepComplete = ({ primary, primaryDark, accent, onNext, canProceed, error,
   );
 };
 
+// ==================== 报告可视化（按量表类型选择方案，见 lib/report-visual-model） ====================
+const SERIF = '"Noto Serif SC", serif';
+
+const ZJ_TONES = {
+  good: { color: '#22A879', soft: '#22A87916', text: '#167A57' },
+  mild: { color: '#E0A528', soft: '#E0A5281C', text: '#8F6510' },
+  moderate: { color: '#E07B39', soft: '#E07B391A', text: '#A4501C' },
+  severe: { color: '#C8161D', soft: '#C8161D14', text: '#9C1218' },
+};
+
+function toneStyle(tone, primary) {
+  if (tone && ZJ_TONES[tone]) return ZJ_TONES[tone];
+  return { color: primary, soft: `${primary}14`, text: primary };
+}
+
+function clamp01(value) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(1, Math.max(0, value));
+}
+
+function bandRangeText(band) {
+  return band.min === band.max
+    ? formatVisualScore(band.min)
+    : `${formatVisualScore(band.min)}–${formatVisualScore(band.max)}`;
+}
+
+function bandSentence(item) {
+  const band = bandForScore(item.score, item.bands);
+  if (!band || item.bands.length < 2) return '';
+  return `处于「${band.level}」区间（${bandRangeText(band)} 分）`;
+}
+
+function bandSegments(item) {
+  const span = item.max - item.min || 1;
+  return item.bands.map((band, index) => {
+    const next = item.bands[index + 1];
+    const start = clamp01((band.min - item.min) / span);
+    const end = Math.max(start, clamp01(((next ? next.min : item.max) - item.min) / span));
+    return { band, start, end };
+  });
+}
+
+function reportImageUrl(source) {
+  const value = String(source || '').trim();
+  if (!value) return '';
+  if (/^https?:\/\//i.test(value) || value.startsWith('/static/') || value.startsWith('data:')) return value;
+  return '';
+}
+
 function formatReportTime() {
   const now = new Date();
   const pad = (n) => String(n).padStart(2, '0');
@@ -1736,190 +1786,350 @@ function formatReportNo(publicId) {
   return `RPT-${y}${m}${d}`;
 }
 
-function levelToneByRadar(score) {
-  if (score >= 80) return { level: '良好', color: '#22A879' };
-  if (score >= 70) return { level: '一般偏好', color: '#1E4C9A' };
-  if (score >= 60) return { level: '一般', color: '#F5B547' };
-  return { level: '需关注', color: '#C8161D' };
-}
+const DEFAULT_SUGGESTION_CARDS = [
+  {
+    icon: 'clock',
+    title: '关注当下状态',
+    desc: '建议结合近期作息、压力与情绪变化进行自我观察，如困扰持续可使用 EAP 资源。',
+    action: '查看自我调节建议',
+  },
+  {
+    icon: 'group',
+    title: '主动建立支持网络',
+    desc: '建议与信任的人保持沟通，或在需要时预约 EAP 咨询，扩展可求助的支持网络。',
+    action: '查看近期活动',
+  },
+  {
+    icon: 'sparkle',
+    title: '持续关照自己',
+    desc: '保持对内在感受的关注，在忙碌中给自己留出喘息与恢复的空间。',
+    action: '了解更多',
+  },
+];
 
-function levelToneByLabel(level, fallbackColor) {
-  const text = String(level || '');
-  if (/良好|正常|优秀|较低|无|阴性|健康/.test(text)) return { level: text, color: '#22A879' };
-  if (/轻|一般偏好|偏高|轻度/.test(text)) return { level: text, color: '#1E4C9A' };
-  if (/中|一般|中度/.test(text)) return { level: text, color: '#F5B547' };
-  if (/重|需关注|明显|阳性|严重/.test(text)) return { level: text, color: '#C8161D' };
-  return { level: text || '—', color: fallbackColor || '#1E4C9A' };
-}
-
-function formatDisplayScore(raw) {
-  const n = Number(raw);
-  if (!Number.isFinite(n)) return '—';
-  if (Number.isInteger(n)) return String(n);
-  return String(Math.round(n * 100) / 100);
-}
-
-function inferScoreCeiling(values) {
-  const nums = values.map(Number).filter((n) => Number.isFinite(n));
-  if (!nums.length) return 100;
-  const max = Math.max(...nums);
-  if (max <= 5.5) return 5;
-  if (max <= 10.5) return 10;
-  if (max <= 100) return 100;
-  return Math.max(max, 100);
-}
-
-function toRadarScore(raw, ceiling) {
-  const n = Number(raw);
-  if (!Number.isFinite(n) || !(ceiling > 0)) return 0;
-  return Math.max(0, Math.min(100, (n / ceiling) * 100));
-}
-
-function wrapRadarLabel(name, maxChars = 5) {
-  const text = String(name || '').trim() || '维度';
-  const lines = [];
-  for (let index = 0; index < text.length; index += maxChars) {
-    lines.push(text.slice(index, index + maxChars));
-  }
-  return lines.slice(0, 2);
-}
-
-function buildDimensionsFromResult(result, primary, accent) {
-  if (!(result && typeof result === 'object')) return [];
-  if (result.type === 'dimension' && Array.isArray(result.dimensions) && result.dimensions.length) {
-    const all = result.dimensions.filter((dim) => dim && typeof dim === 'object');
-    const withoutTotal = all.filter((dim) => !String(dim.id || '').endsWith('-total'));
-    const source = withoutTotal.length >= 3 ? withoutTotal : all;
-    const rawScores = source.map((dim) => Number(dim.score ?? dim.average));
-    const ceiling = inferScoreCeiling(rawScores);
-    const count = source.length;
-    return source.map((dim, index) => {
-      const raw = Number(dim.score ?? dim.average);
-      const radarScore = toRadarScore(raw, ceiling);
-      const tone = dim.level
-        ? levelToneByLabel(dim.level, primary)
-        : levelToneByRadar(radarScore);
-      const suggestions = Array.isArray(dim.suggestions)
-        ? dim.suggestions.map((item) => String(item || '').trim()).filter(Boolean)
-        : [];
-      return {
-        name: dim.title || dim.name || `维度 ${index + 1}`,
-        score: formatDisplayScore(raw),
-        radarScore,
-        level: dim.level || tone.level,
-        color: tone.color || accent,
-        angle: -90 + index * (360 / Math.max(count, 1)),
-        note: dim.visitorDescription || dim.description || '',
-        suggestions,
-      };
-    });
-  }
-  if (result.type === 'sum' && result.totalScore != null) {
-    const raw = Number(result.totalScore);
-    const ceiling = inferScoreCeiling([raw]);
-    const radarScore = toRadarScore(raw, ceiling);
-    const tone = result.level
-      ? levelToneByLabel(result.level, primary)
-      : levelToneByRadar(radarScore);
-    return [{
-      name: '综合得分',
-      score: formatDisplayScore(raw),
-      radarScore,
-      level: result.level || tone.level,
-      color: tone.color,
-      angle: -90,
-      note: result.summary || '',
-      suggestions: [],
-    }];
-  }
-  return [];
-}
-
-function buildSuggestionsFromDimensions(dimensions) {
-  const fromBackend = [];
-  for (const dim of dimensions) {
-    for (const tip of dim.suggestions || []) {
-      if (fromBackend.length >= 3) break;
-      fromBackend.push({
-        icon: fromBackend.length === 0 ? 'clock' : fromBackend.length === 1 ? 'group' : 'sparkle',
-        title: dim.name ? `关于${dim.name}` : '个性化建议',
-        desc: tip,
-        action: '了解更多',
-      });
-    }
-    if (fromBackend.length >= 3) break;
-  }
-  if (fromBackend.length >= 3) return fromBackend.slice(0, 3);
-
-  if (!dimensions.length) {
-    return [
-      {
-        icon: 'clock',
-        title: '关注当下状态',
-        desc: '建议结合近期作息、压力与情绪变化进行自我观察，如困扰持续可使用 EAP 资源。',
-        action: '查看自我调节建议',
-      },
-      {
-        icon: 'group',
-        title: '主动建立支持网络',
-        desc: '建议与信任的人保持沟通，或在需要时预约 EAP 咨询，扩展可求助的支持网络。',
-        action: '查看近期活动',
-      },
-      {
-        icon: 'sparkle',
-        title: '持续关照自己',
-        desc: '保持对内在感受的关注，在忙碌中给自己留出喘息与恢复的空间。',
-        action: '了解更多',
-      },
-    ];
-  }
-
-  const attentionRank = (dim) => {
-    const text = String(dim.level || '');
-    if (/重|需关注|明显|阳性|严重/.test(text)) return 3;
-    if (/中|中度/.test(text)) return 2;
-    if (/轻|偏高|轻度/.test(text)) return 1;
-    return 0;
+/** 建议卡片：优先取需要关注的维度/总分里配置的建议，不够再补通用建议。 */
+function buildSuggestionCards(model) {
+  const icons = ['clock', 'group', 'sparkle'];
+  const cards = [];
+  const push = (title, desc, action = '了解更多') => {
+    const text = String(desc || '').trim();
+    if (!text || cards.length >= 3 || cards.some((card) => card.desc === text)) return;
+    cards.push({ icon: icons[cards.length], title, desc: text, action });
   };
-  const sortedByAttention = [...dimensions].sort((a, b) => {
-    const diff = attentionRank(b) - attentionRank(a);
-    if (diff !== 0) return diff;
-    return (b.radarScore || 0) - (a.radarScore || 0);
-  });
-  const focus = sortedByAttention[0];
-  const calm = [...dimensions].sort((a, b) => attentionRank(a) - attentionRank(b) || (a.radarScore || 0) - (b.radarScore || 0))[0];
-
-  const filled = [...fromBackend];
-  if (filled.length < 3 && focus) {
-    filled.push({
-      icon: 'clock',
-      title: `关注${focus.name}`,
-      desc: focus.note
-        || `根据本次测评，${focus.name}相对需要关注。建议先观察作息、压力与支持系统，必要时使用 EAP 资源。`,
-      action: '查看自我调节建议',
-    });
+  if (model) {
+    const rank = (tone) => ({ severe: 3, moderate: 2, mild: 1 }[tone] || 0);
+    const scored = [];
+    if (model.hero) scored.push(model.hero);
+    for (const group of model.groups) {
+      for (const item of group.items) {
+        scored.push(item);
+        for (const child of item.children) scored.push(child);
+      }
+    }
+    const ordered = [...scored].sort((a, b) => rank(b.tone) - rank(a.tone));
+    for (const item of ordered) {
+      for (const tip of item.suggestions) {
+        push(item === model.hero ? '整体建议' : `关于${item.title}`, tip);
+      }
+    }
+    if (model.match) {
+      for (const tip of model.match.suggestions) push(`关于${model.match.title}`, tip);
+    }
+    const focus = ordered.find((item) => rank(item.tone) >= 2 && item !== model.hero);
+    if (focus) {
+      push(
+        `关注${focus.title}`,
+        focus.description || `本次测评中${focus.title}相对需要关注，建议先观察作息、压力与支持系统，必要时使用 EAP 资源。`,
+        '查看自我调节建议',
+      );
+    }
   }
-  if (filled.length < 3) {
-    filled.push({
-      icon: 'group',
-      title: '主动建立支持网络',
-      desc: '建议与信任的人保持沟通，或在需要时预约 EAP 咨询，扩展可求助的支持网络。',
-      action: '查看近期活动',
-    });
+  for (const card of DEFAULT_SUGGESTION_CARDS) {
+    push(card.title, card.desc, card.action);
   }
-  if (filled.length < 3 && calm) {
-    filled.push({
-      icon: 'sparkle',
-      title: `保持${calm.name}`,
-      desc: calm.note
-        || `本次测评中${calm.name}相对平稳，可继续保持现有节奏与自我关照。`,
-      action: '了解更多',
-    });
-  }
-  return filled.slice(0, 3);
+  return cards.slice(0, 3);
 }
 
-// ==================== Step 6: 报告预览（模拟版式 + 真实结果） ====================
+/** 横向区间刻度：分段色带 + 当前位置 + 参考界值。 */
+const ZjBandScale = ({ item, primary }) => {
+  const tone = toneStyle(item.tone, primary);
+  const span = item.max - item.min || 1;
+  const segments = bandSegments(item);
+  const active = bandForScore(item.score, item.bands);
+  return (
+    <div>
+      <div style={{ position: 'relative', paddingTop: 12 }}>
+        <div style={{ position: 'relative', height: 10, borderRadius: 5, background: '#EEF1F6', overflow: 'hidden' }}>
+          {segments.length > 1 ? segments.map(({ band, start, end }) => (
+            <div
+              key={`${band.min}-${band.max}`}
+              style={{
+                position: 'absolute', top: 0, bottom: 0,
+                left: `${start * 100}%`, width: `${(end - start) * 100}%`,
+                background: toneStyle(band.tone, primary).color,
+                opacity: band === active ? 0.95 : 0.25,
+                borderRight: '2px solid #fff',
+              }}
+            />
+          )) : (
+            <div style={{ width: `${item.ratio * 100}%`, height: '100%', background: tone.color, borderRadius: 5, transition: 'width .8s ease' }}/>
+          )}
+          {item.markers.map((marker) => (
+            <div
+              key={marker.label}
+              title={marker.label}
+              style={{
+                position: 'absolute', top: 0, bottom: 0, width: 2,
+                left: `${clamp01((marker.value - item.min) / span) * 100}%`,
+                background: 'rgba(15,46,95,.55)',
+              }}
+            />
+          ))}
+        </div>
+        <div style={{
+          position: 'absolute', top: 0, left: `${item.ratio * 100}%`, transform: 'translateX(-50%)',
+          width: 0, height: 0, borderLeft: '6px solid transparent', borderRight: '6px solid transparent',
+          borderTop: `8px solid ${tone.color}`,
+        }}/>
+      </div>
+      {segments.length > 1 ? (
+        <div style={{ position: 'relative', height: 34, marginTop: 6, fontSize: 11, color: '#8B96A8' }}>
+          {segments.map(({ band, start, end }) => (
+            <div
+              key={`${band.level}-${band.min}`}
+              title={`${band.level} ${bandRangeText(band)}`}
+              style={{
+                position: 'absolute', top: 0, left: `${start * 100}%`, width: `${(end - start) * 100}%`,
+                textAlign: 'center', overflow: 'hidden', padding: '0 2px', boxSizing: 'border-box',
+                color: band === active ? toneStyle(band.tone, primary).text : '#8B96A8',
+                fontWeight: band === active ? 600 : 400,
+              }}
+            >
+              <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{band.level}</div>
+              {end - start >= 0.12 ? (
+                <div style={{ whiteSpace: 'nowrap', fontSize: 10, opacity: 0.85 }}>{bandRangeText(band)}</div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 11, color: '#8B96A8' }}>
+          <span>{formatVisualScore(item.min)}</span>
+          <span>{formatVisualScore(item.max)}</span>
+        </div>
+      )}
+      {item.markers.length ? (
+        <div style={{ fontSize: 11, color: '#8B96A8', marginTop: 4 }}>
+          {item.markers.map((marker) => marker.label).join(' · ')}
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
+const ZjSuggestionList = ({ items, primary }) => (items.length ? (
+  <ul style={{ listStyle: 'none', margin: '12px 0 0', padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+    {items.map((tip, index) => (
+      <li key={`${index}-${tip}`} style={{ display: 'flex', gap: 10, fontSize: 13, color: '#4A5A78', lineHeight: 1.75 }}>
+        <span style={{
+          flexShrink: 0, width: 20, height: 20, marginTop: 2, borderRadius: '50%',
+          background: `${primary}14`, color: primary, fontSize: 11, fontWeight: 700,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>{index + 1}</span>
+        <span style={{ wordBreak: 'break-word' }}>{tip}</span>
+      </li>
+    ))}
+  </ul>
+) : null);
+
+/** 总分 / 求和得分的解读面板。 */
+const ZjScorePanel = ({ item, title, primary }) => {
+  const sentence = bandSentence(item);
+  return (
+    <div className="gxa-report-panel" style={{ background: '#fff', borderRadius: 8, padding: 32, marginTop: 24, boxShadow: '0 2px 20px rgba(15,46,95,.04)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+        <div style={{ minWidth: 0 }}>
+          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: '#0F2E5F', fontFamily: SERIF }}>{title}</h3>
+          {sentence ? <p style={{ fontSize: 13, color: '#4A5A78', margin: '6px 0 0' }}>{sentence}</p> : null}
+        </div>
+        {item.level ? (
+          <span style={{ fontSize: 13, fontWeight: 600, color: toneStyle(item.tone, primary).text, background: toneStyle(item.tone, primary).soft, padding: '4px 12px', borderRadius: 4 }}>
+            {item.level}
+          </span>
+        ) : null}
+      </div>
+      {item.bands.length > 1 || item.markers.length ? (
+        <div style={{ marginTop: 18 }}><ZjBandScale item={item} primary={primary}/></div>
+      ) : null}
+      {item.intro ? (
+        <div style={{ marginTop: 14, padding: '10px 12px', background: '#F5F7FA', borderRadius: 4, fontSize: 12, color: '#4A5A78', lineHeight: 1.7 }}>{item.intro}</div>
+      ) : null}
+      {item.description ? (
+        <p style={{ margin: '16px 0 0', fontSize: 14, color: '#4A5A78', lineHeight: 1.85, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{item.description}</p>
+      ) : null}
+      <ZjSuggestionList items={item.suggestions} primary={primary}/>
+    </div>
+  );
+};
+
+/** 维度详情（子维度嵌套展示）。 */
+const ZjDimensionCard = ({ item, primary, depth = 0 }) => {
+  const tone = toneStyle(item.tone, primary);
+  const sentence = bandSentence(item);
+  return (
+    <div
+      id={`zj-dim-${item.id}`}
+      style={{
+        padding: depth ? '14px 16px' : '18px 0',
+        borderBottom: depth ? 'none' : '1px solid #F0EBE0',
+        borderLeft: depth ? `3px solid ${tone.color}` : 'none',
+        background: depth ? '#FBFAF7' : 'transparent',
+        borderRadius: depth ? 6 : 0,
+        marginTop: depth ? 12 : 0,
+        scrollMarginTop: 96,
+      }}
+    >
+      <div className="gxa-report-dim-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+        <div style={{ minWidth: 0 }}>
+          {depth ? <div style={{ fontSize: 11, color: '#8B96A8', marginBottom: 2 }}>子维度</div> : null}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: depth ? 14 : 16, fontWeight: 600, color: '#0F2E5F', fontFamily: SERIF, wordBreak: 'break-word' }}>{item.title}</span>
+            {item.level ? (
+              <span style={{ fontSize: 11, color: tone.text, background: tone.soft, padding: '2px 8px', borderRadius: 3 }}>{item.level}</span>
+            ) : null}
+          </div>
+          {sentence ? <div style={{ fontSize: 12, color: '#8B96A8', marginTop: 4 }}>{sentence}</div> : null}
+        </div>
+        <div style={{ textAlign: 'right', flexShrink: 0, whiteSpace: 'nowrap' }}>
+          <span style={{ fontSize: 22, fontWeight: 700, color: tone.color, fontFamily: SERIF }}>{formatVisualScore(item.score)}</span>
+          <span style={{ fontSize: 12, color: '#8B96A8' }}> / {formatVisualScore(item.max)}</span>
+        </div>
+      </div>
+      <div style={{ marginTop: 10 }}><ZjBandScale item={item} primary={primary}/></div>
+      {item.intro ? (
+        <div style={{ marginTop: 10, padding: '10px 12px', background: '#F5F7FA', borderRadius: 4, fontSize: 12, color: '#4A5A78', lineHeight: 1.7 }}>{item.intro}</div>
+      ) : null}
+      {item.description ? (
+        <p style={{ margin: '10px 0 0', fontSize: 13, color: '#4A5A78', lineHeight: 1.8, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{item.description}</p>
+      ) : null}
+      <ZjSuggestionList items={item.suggestions} primary={primary}/>
+      {item.children.map((child) => (
+        <ZjDimensionCard key={child.id} item={child} primary={primary} depth={depth + 1}/>
+      ))}
+    </div>
+  );
+};
+
+/** 维度条形对比（维度少于 3 个，或 CBCL 这类需要看界值的量表）。 */
+const ZjBars = ({ items, primary }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    {items.map((item) => {
+      const tone = toneStyle(item.tone, primary);
+      const span = item.max - item.min || 1;
+      return (
+        <a key={item.id} href={`#zj-dim-${item.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, marginBottom: 6 }}>
+            <span style={{ fontSize: 14, fontWeight: 600, color: '#0F2E5F', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</span>
+            <span style={{ flexShrink: 0, fontSize: 12, color: '#8B96A8', whiteSpace: 'nowrap' }}>
+              <b style={{ fontSize: 16, color: tone.color, fontFamily: SERIF }}>{formatVisualScore(item.score)}</b> / {formatVisualScore(item.max)}
+              {item.level ? (
+                <span style={{ marginLeft: 8, color: tone.text, background: tone.soft, padding: '1px 6px', borderRadius: 3 }}>{item.level}</span>
+              ) : null}
+            </span>
+          </div>
+          <div style={{ position: 'relative', height: 8, borderRadius: 4, background: '#EEF1F6', overflow: 'hidden' }}>
+            <div style={{ width: `${Math.max(item.ratio * 100, item.score > item.min ? 2 : 0)}%`, height: '100%', background: tone.color, borderRadius: 4, transition: 'width .8s ease' }}/>
+            {item.markers.map((marker) => (
+              <div
+                key={marker.label}
+                title={marker.label}
+                style={{ position: 'absolute', top: 0, bottom: 0, width: 2, left: `${clamp01((marker.value - item.min) / span) * 100}%`, background: 'rgba(15,46,95,.55)' }}
+              />
+            ))}
+          </div>
+        </a>
+      );
+    })}
+  </div>
+);
+
+/** 二维象限（PBI：关爱 × 控制）。 */
+const ZjQuadrant = ({ quadrant, primary }) => {
+  const size = 240;
+  const pad = 30;
+  const plot = size - pad * 2;
+  const xAt = (value) => pad + clamp01((value - quadrant.x.min) / (quadrant.x.max - quadrant.x.min)) * plot;
+  const yAt = (value) => size - pad - clamp01((value - quadrant.y.min) / (quadrant.y.max - quadrant.y.min)) * plot;
+  const point = { x: xAt(quadrant.x.score), y: yAt(quadrant.y.score) };
+  const labels = [
+    { text: quadrant.cells.lowHigh, x: pad + 6, y: pad + 16, anchor: 'start' },
+    { text: quadrant.cells.highHigh, x: size - pad - 6, y: pad + 16, anchor: 'end' },
+    { text: quadrant.cells.lowLow, x: pad + 6, y: size - pad - 8, anchor: 'start' },
+    { text: quadrant.cells.highLow, x: size - pad - 6, y: size - pad - 8, anchor: 'end' },
+  ];
+  return (
+    <div className="gxa-report-panel" style={{ background: '#fff', borderRadius: 8, padding: 24, boxShadow: '0 2px 20px rgba(15,46,95,.04)', minWidth: 0 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: '#0F2E5F', fontFamily: SERIF }}>{quadrant.title}</h3>
+        <span style={{ fontSize: 12, fontWeight: 600, color: primary, background: `${primary}12`, padding: '3px 10px', borderRadius: 3 }}>{quadrant.result}</span>
+      </div>
+      <svg viewBox={`0 0 ${size} ${size}`} style={{ width: '100%', maxWidth: 280, height: 'auto', display: 'block', margin: '12px auto 0' }} role="img" aria-label={`${quadrant.title}：${quadrant.result}`}>
+        <rect x={pad} y={pad} width={plot} height={plot} rx={8} fill="#FBFAF7" stroke="#E8ECF3"/>
+        <line x1={xAt(quadrant.x.high)} x2={xAt(quadrant.x.high)} y1={pad} y2={size - pad} stroke={primary} strokeOpacity={0.5} strokeDasharray="4 4"/>
+        <line x1={pad} x2={size - pad} y1={yAt(quadrant.y.high)} y2={yAt(quadrant.y.high)} stroke={primary} strokeOpacity={0.5} strokeDasharray="4 4"/>
+        <line x1={xAt(quadrant.x.low)} x2={xAt(quadrant.x.low)} y1={pad} y2={size - pad} stroke="#8B96A8" strokeOpacity={0.45} strokeDasharray="2 4"/>
+        <line x1={pad} x2={size - pad} y1={yAt(quadrant.y.low)} y2={yAt(quadrant.y.low)} stroke="#8B96A8" strokeOpacity={0.45} strokeDasharray="2 4"/>
+        {labels.map((label) => (
+          <text key={label.text} x={label.x} y={label.y} textAnchor={label.anchor} fontSize="12"
+            fontWeight={label.text === quadrant.result ? 700 : 400}
+            fill={label.text === quadrant.result ? primary : '#8B96A8'}>{label.text}</text>
+        ))}
+        <circle cx={point.x} cy={point.y} r="12" fill={primary} opacity="0.15"/>
+        <circle cx={point.x} cy={point.y} r="6" fill={primary} stroke="#fff" strokeWidth="2"/>
+        <text x={size / 2} y={size - 8} textAnchor="middle" fontSize="11" fill="#8B96A8">
+          {quadrant.x.label} {formatVisualScore(quadrant.x.score)} / {quadrant.x.max} →
+        </text>
+        <text x={12} y={size / 2} textAnchor="middle" fontSize="11" fill="#8B96A8" transform={`rotate(-90 12 ${size / 2})`}>
+          {quadrant.y.label} {formatVisualScore(quadrant.y.score)} / {quadrant.y.max} →
+        </text>
+      </svg>
+      <div style={{ marginTop: 6, textAlign: 'center', fontSize: 11, color: '#8B96A8' }}>虚线为高分界值，点线为低分界值</div>
+    </div>
+  );
+};
+
+/** AAS 依恋类型：亲近 × 焦虑 的 2×2 示意。 */
+const ZjMatchMap = ({ map, primary }) => {
+  const ordered = [...map.cells].sort((a, b) => b.row - a.row || a.column - b.column);
+  return (
+    <div className="gxa-report-panel" style={{ background: '#fff', borderRadius: 8, padding: 32, marginTop: 24, boxShadow: '0 2px 20px rgba(15,46,95,.04)' }}>
+      <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: '#0F2E5F', fontFamily: SERIF }}>类型位置</h3>
+      <p style={{ fontSize: 13, color: '#4A5A78', margin: '6px 0 18px' }}>横向为{map.xLabel}，纵向为{map.yLabel}</p>
+      <div style={{ display: 'flex', gap: 12, maxWidth: 520 }}>
+        <div style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', fontSize: 11, color: '#8B96A8', textAlign: 'center' }}>{map.yLabel} 低 → 高</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            {ordered.map((cell) => (
+              <div key={cell.id} style={{
+                minHeight: 84, borderRadius: 6, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                border: `1.5px solid ${cell.active ? primary : '#E8ECF3'}`,
+                background: cell.active ? `${primary}10` : '#FBFAF7',
+              }}>
+                <span style={{ fontSize: 15, fontFamily: SERIF, fontWeight: cell.active ? 700 : 500, color: cell.active ? primary : '#8B96A8' }}>{cell.title}</span>
+                {cell.active ? (
+                  <span style={{ marginTop: 6, fontSize: 11, color: '#fff', background: primary, padding: '2px 8px', borderRadius: 10 }}>你的类型</span>
+                ) : null}
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 8, textAlign: 'center', fontSize: 11, color: '#8B96A8' }}>{map.xLabel} 低 → 高</div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ==================== Step 6: 报告预览（真实计分结果） ====================
 const StepReport = ({
   report,
   scale,
@@ -1941,38 +2151,43 @@ const StepReport = ({
   onBack,
 }) => {
   const result = report?.result && typeof report.result === 'object' ? report.result : null;
-  const dimensions = buildDimensionsFromResult(result, primary, accent);
-  const hasRadar = dimensions.length >= 3;
-  const avgRadar = dimensions.length
-    ? dimensions.reduce((sum, item) => sum + (item.radarScore || 0), 0) / dimensions.length
-    : 0;
-  const rawNums = dimensions
-    .map((item) => Number(item.score))
-    .filter((n) => Number.isFinite(n));
-  const dimCeiling = inferScoreCeiling(rawNums);
-  const symptomLike = result?.type === 'dimension' && dimCeiling <= 5.5;
-  const ringProgressBase = result?.type === 'sum' && result.totalScore != null
-    ? toRadarScore(result.totalScore, inferScoreCeiling([Number(result.totalScore)]))
-    : avgRadar;
-  // 症状类因子分越高越需关注：环进度按「越低越好」映射，避免高分误显为良好
-  const ringProgress = symptomLike ? Math.max(0, 100 - ringProgressBase) : ringProgressBase;
-  const overallTone = result?.type === 'sum' && result.level
-    ? levelToneByLabel(result.level, primary)
-    : levelToneByRadar(ringProgress);
-  const ringLevel = (result?.type === 'sum' && result.level) || overallTone.level;
-  const ringValue = result?.type === 'sum' && result.totalScore != null
-    ? formatDisplayScore(result.totalScore)
-    : (rawNums.length
-      ? formatDisplayScore(rawNums.reduce((a, b) => a + b, 0) / rawNums.length)
-      : (dimensions.length ? Math.round(avgRadar) : '—'));
-  const ringCaption = result?.type === 'sum' ? '量表总分' : (symptomLike ? '因子均分' : '综合评分');
-  const suggestions = buildSuggestionsFromDimensions(dimensions);
+  const model = React.useMemo(
+    () => (result ? buildReportVisualModel(scale?.report || {}, result) : null),
+    [result, scale],
+  );
+  const isMatch = model?.kind === 'match';
+  const match = model?.match || null;
+  const hero = model?.hero || null;
+  const topItems = model ? model.groups.flatMap((group) => group.items) : [];
+  const concernCount = topItems.filter((item) => item.tone === 'moderate' || item.tone === 'severe').length;
+  let ring = null;
+  if (hero) {
+    ring = {
+      progress: hero.ratio * 100,
+      value: formatVisualScore(hero.score),
+      caption: model.kind === 'score' ? '量表总分' : (hero.title || '总分'),
+      sub: `满分 ${formatVisualScore(hero.max)}`,
+      level: hero.level || '—',
+    };
+  } else if (topItems.length) {
+    ring = {
+      progress: ((topItems.length - concernCount) / topItems.length) * 100,
+      value: String(concernCount),
+      caption: '需关注维度',
+      sub: `共 ${topItems.length} 个维度`,
+      level: concernCount ? '建议关注' : '整体平稳',
+    };
+  }
+  const radarItems = model?.overview === 'radar' ? model.radar : [];
+  const barItems = model?.overview === 'bars' ? model.bars : [];
+  const suggestions = buildSuggestionCards(model);
   const reportNo = formatReportNo(report?.publicId);
   const reportTime = formatReportTime();
   const title = report?.assessmentTitle || scale?.name || '你的心理测评报告';
   const subtitle = report?.assessmentSubtitle || scale?.subtitle || '';
-  const summaryText = report?.resultSummary || result?.summary || '';
-  const isMatch = result?.type === 'match';
+  // 固定量表（PBI/CBCL/暗黑人格）自带综述；没有计分结果时退回服务端摘要
+  const summaryText = model ? model.summary : (report?.resultSummary || '');
+  const matchImage = reportImageUrl(match?.image);
 
   const showResultPager = resultPageTotal > 1
     && (typeof onPrevResult === 'function' || typeof onNextResult === 'function');
@@ -2033,14 +2248,14 @@ const StepReport = ({
         <div style={{ position: 'absolute', top: -80, right: -80, width: 300, height: 300, borderRadius: '50%', background: 'rgba(255,255,255,.05)' }}/>
         <div style={{ position: 'absolute', top: -120, right: -120, width: 400, height: 400, borderRadius: '50%', border: '1px solid rgba(255,255,255,.08)' }}/>
 
-        <div className="gxa-report-hero" style={{ position: 'relative', display: 'grid', gridTemplateColumns: isMatch ? '1fr' : '1fr auto', gap: 40, alignItems: 'center' }}>
+        <div className="gxa-report-hero" style={{ position: 'relative', display: 'grid', gridTemplateColumns: (ring || matchImage) ? '1fr auto' : '1fr', gap: 40, alignItems: 'center' }}>
           <div className="gxa-report-hero-copy" style={{ minWidth: 0 }}>
             <div className="gxa-report-kicker" style={{ fontSize: 12, opacity: .8, letterSpacing: 1, marginBottom: 12, wordBreak: 'break-word' }}>YOUR PSYCHOLOGICAL BASELINE · 测评报告</div>
-            <h1 className="gxa-report-title" style={{ fontFamily: '"Noto Serif SC", serif', fontSize: 36, fontWeight: 700, margin: 0, letterSpacing: 1, lineHeight: 1.35, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
-              {isMatch ? (result.title || result.matchTitle || title) : title}
+            <h1 className="gxa-report-title" style={{ fontFamily: SERIF, fontSize: 36, fontWeight: 700, margin: 0, letterSpacing: 1, lineHeight: 1.35, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+              {isMatch ? (match?.title || title) : title}
             </h1>
             <div className="gxa-report-sub" style={{ opacity: .85, fontSize: 18, fontWeight: 500, marginTop: 10, lineHeight: 1.55, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
-              {subtitle || (result?.level ? `结果等级：${result.level}` : '基于本次真实作答生成')}
+              {isMatch ? title : (subtitle || (hero?.level ? `结果等级：${hero.level}` : '基于本次真实作答生成'))}
               <span className="gxa-report-sub-sep"> · </span>
               <span className="gxa-report-no">报告编号 {reportNo}</span>
             </div>
@@ -2053,86 +2268,119 @@ const StepReport = ({
             </div>
           </div>
 
-          {!isMatch ? (
-            <div className="gxa-report-score" style={{ position: 'relative', width: 160, height: 160, flexShrink: 0 }}>
+          {ring ? (
+            <div className="gxa-report-score" style={{ position: 'relative', width: 168, height: 168, flexShrink: 0 }}>
               <svg viewBox="0 0 160 160" style={{ width: '100%', height: '100%' }}>
                 <circle cx="80" cy="80" r="66" fill="none" stroke="rgba(255,255,255,.15)" strokeWidth="10"/>
                 <circle cx="80" cy="80" r="66" fill="none" stroke="#fff" strokeWidth="10"
-                  strokeDasharray={`${(Number(ringProgress) / 100) * 414} 414`}
-                  strokeLinecap="round" transform="rotate(-90 80 80)"/>
+                  strokeDasharray={`${(clamp01(ring.progress / 100)) * 414.7} 414.7`}
+                  strokeLinecap="round" transform="rotate(-90 80 80)"
+                  style={{ transition: 'stroke-dasharray 1s ease' }}/>
               </svg>
-              <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                <div className="gxa-report-score-num" style={{ fontSize: 42, fontWeight: 700, fontFamily: '"Noto Serif SC", serif', lineHeight: 1 }}>{ringValue}</div>
-                <div style={{ fontSize: 11, opacity: .8, letterSpacing: 1, marginTop: 4 }}>{ringCaption}</div>
-                <div style={{ fontSize: 11, marginTop: 4, background: 'rgba(255,255,255,.15)', padding: '2px 10px', borderRadius: 3 }}>{ringLevel}</div>
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+                <div style={{ fontSize: 11, opacity: .8, letterSpacing: 1, maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ring.caption}</div>
+                <div className="gxa-report-score-num" style={{ fontSize: 40, fontWeight: 700, fontFamily: SERIF, lineHeight: 1.1, marginTop: 2 }}>{ring.value}</div>
+                <div style={{ fontSize: 11, opacity: .75 }}>{ring.sub}</div>
+                <div style={{ fontSize: 11, marginTop: 5, background: 'rgba(255,255,255,.18)', padding: '2px 10px', borderRadius: 3, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ring.level}</div>
               </div>
+            </div>
+          ) : matchImage ? (
+            <div className="gxa-report-score" style={{ width: 168, height: 168, borderRadius: 12, overflow: 'hidden', border: '3px solid rgba(255,255,255,.35)', flexShrink: 0 }}>
+              <img src={matchImage} alt={match?.title || ''} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}/>
             </div>
           ) : null}
         </div>
       </div>
 
       {summaryText ? (
-        <div className="gxa-report-panel" style={{ background: '#fff', borderRadius: 8, padding: 24, marginTop: 24, boxShadow: '0 2px 20px rgba(15,46,95,.04)', fontSize: 14, color: '#4A5A78', lineHeight: 1.85, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+        <div className="gxa-report-panel" style={{ background: '#fff', borderRadius: 8, padding: 24, marginTop: 24, boxShadow: '0 2px 20px rgba(15,46,95,.04)', fontSize: 14, color: '#4A5A78', lineHeight: 1.85, whiteSpace: 'pre-wrap', wordBreak: 'break-word', borderLeft: `3px solid ${primary}` }}>
           {summaryText}
         </div>
       ) : null}
 
-      {isMatch ? (
-        <div className="gxa-report-panel" style={{ background: '#fff', borderRadius: 8, padding: 32, marginTop: 24, boxShadow: '0 2px 20px rgba(15,46,95,.04)' }}>
-          {(result.description || result.matchDescription) ? (
-            <p style={{ margin: 0, fontSize: 15, color: '#4A5A78', lineHeight: 1.85, whiteSpace: 'pre-wrap' }}>
-              {result.description || result.matchDescription}
-            </p>
-          ) : null}
-          {result.shareText ? (
-            <div style={{ marginTop: 18, padding: '12px 14px', background: `${primary}08`, borderRadius: 6, fontSize: 13, color: primary, lineHeight: 1.7 }}>
-              {result.shareText}
-            </div>
-          ) : null}
+      {model?.kind === 'score' && hero ? (
+        <ZjScorePanel item={hero} title="结果解读" primary={primary}/>
+      ) : null}
+
+      {model?.kind === 'profile' && hero ? (
+        <ZjScorePanel item={hero} title={`${hero.title || '总分'}解读`} primary={primary}/>
+      ) : null}
+
+      {model?.quadrants?.length ? (
+        <div className="gxa-report-grid" style={{ display: 'grid', gridTemplateColumns: model.quadrants.length > 1 ? '1fr 1fr' : '1fr', gap: 24, marginTop: 24 }}>
+          {model.quadrants.map((quadrant) => (
+            <ZjQuadrant key={quadrant.id} quadrant={quadrant} primary={primary}/>
+          ))}
         </div>
       ) : null}
 
-      {!isMatch && dimensions.length > 0 ? (
-        <div className="gxa-report-grid" style={{ display: 'grid', gridTemplateColumns: hasRadar ? '1.2fr 1fr' : '1fr', gap: 24, marginTop: 24 }}>
-          {hasRadar ? (
-            <div className="gxa-report-panel" style={{ background: '#fff', borderRadius: 8, padding: 32, boxShadow: '0 2px 20px rgba(15,46,95,.04)', minWidth: 0, overflow: 'hidden' }}>
-              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: '#0F2E5F', fontFamily: '"Noto Serif SC", serif' }}>心理画像</h3>
-              <p style={{ fontSize: 13, color: '#4A5A78', margin: '6px 0 20px' }}>根据本次真实计分生成的维度画像</p>
-              <div className="gxa-report-radar">
-                <RadarChart dimensions={dimensions} primary={primary}/>
-              </div>
+      {radarItems.length >= 3 ? (
+        <div className="gxa-report-grid" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 24, marginTop: 24 }}>
+          <div className="gxa-report-panel" style={{ background: '#fff', borderRadius: 8, padding: 32, boxShadow: '0 2px 20px rgba(15,46,95,.04)', minWidth: 0, overflow: 'hidden' }}>
+            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: '#0F2E5F', fontFamily: SERIF }}>心理画像</h3>
+            <p style={{ fontSize: 13, color: '#4A5A78', margin: '6px 0 20px' }}>各维度得分在其满分中的位置</p>
+            <div className="gxa-report-radar">
+              <RadarChart items={radarItems} primary={primary}/>
             </div>
-          ) : null}
-
+          </div>
           <div className="gxa-report-panel" style={{ background: '#fff', borderRadius: 8, padding: 32, boxShadow: '0 2px 20px rgba(15,46,95,.04)', minWidth: 0 }}>
-            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: '#0F2E5F', fontFamily: '"Noto Serif SC", serif' }}>
-              {hasRadar ? '各维度详解' : '结果详解'}
-            </h3>
-            <p style={{ fontSize: 13, color: '#4A5A78', margin: '6px 0 20px' }}>分数与解读来自本次真实作答</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {dimensions.map((d) => (
-                <div key={d.name} style={{ padding: '14px 0', borderBottom: '1px solid #F0EBE0' }}>
-                  <div className="gxa-report-dim-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 6 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', minWidth: 0 }}>
-                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: d.color, flexShrink: 0 }}/>
-                      <span style={{ fontSize: 14, fontWeight: 600, color: '#0F2E5F' }}>{d.name}</span>
-                      {d.level ? (
-                        <span style={{ fontSize: 11, color: d.color, background: `${d.color}12`, padding: '2px 8px', borderRadius: 3 }}>{d.level}</span>
-                      ) : null}
-                    </div>
-                    <span style={{ fontSize: 18, fontWeight: 700, color: d.color, fontFamily: '"Noto Serif SC", serif', flexShrink: 0 }}>{d.score}</span>
-                  </div>
-                  {d.note ? (
-                    <div style={{ fontSize: 12, color: '#4A5A78', lineHeight: 1.6, paddingLeft: 18, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{d.note}</div>
-                  ) : null}
-                </div>
-              ))}
-            </div>
+            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: '#0F2E5F', fontFamily: SERIF }}>维度一览</h3>
+            <p style={{ fontSize: 13, color: '#4A5A78', margin: '6px 0 20px' }}>点击查看对应维度的详细解读</p>
+            <ZjBars items={radarItems} primary={primary}/>
           </div>
         </div>
       ) : null}
 
-      {!isMatch && !dimensions.length ? (
+      {barItems.length ? (
+        <div className="gxa-report-panel" style={{ background: '#fff', borderRadius: 8, padding: 32, marginTop: 24, boxShadow: '0 2px 20px rgba(15,46,95,.04)' }}>
+          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: '#0F2E5F', fontFamily: SERIF }}>维度对比</h3>
+          <p style={{ fontSize: 13, color: '#4A5A78', margin: '6px 0 20px' }}>条形长度为得分在该维度满分中的位置，竖线为参考界值</p>
+          <ZjBars items={barItems} primary={primary}/>
+        </div>
+      ) : null}
+
+      {model?.kind === 'profile' && model.groups.length ? (
+        <div className="gxa-report-panel" style={{ background: '#fff', borderRadius: 8, padding: 32, marginTop: 24, boxShadow: '0 2px 20px rgba(15,46,95,.04)' }}>
+          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: '#0F2E5F', fontFamily: SERIF }}>
+            {topItems.length > 1 ? '各维度详解' : '结果详解'}
+          </h3>
+          <p style={{ fontSize: 13, color: '#4A5A78', margin: '6px 0 8px' }}>分数、所处区间与解读均来自本次真实作答</p>
+          {model.groups.map((group, index) => (
+            <div key={`${group.title}-${index}`}>
+              {group.title ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '22px 0 4px' }}>
+                  <span style={{ width: 4, height: 16, borderRadius: 2, background: primary }}/>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: '#0F2E5F', fontFamily: SERIF }}>{group.title}</span>
+                </div>
+              ) : null}
+              {group.items.map((item) => (
+                <ZjDimensionCard key={item.id} item={item} primary={primary}/>
+              ))}
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {isMatch && match ? (
+        <div className="gxa-report-panel" style={{ background: '#fff', borderRadius: 8, padding: 32, marginTop: 24, boxShadow: '0 2px 20px rgba(15,46,95,.04)' }}>
+          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: '#0F2E5F', fontFamily: SERIF }}>结果解读</h3>
+          {match.description ? (
+            <p style={{ margin: '14px 0 0', fontSize: 15, color: '#4A5A78', lineHeight: 1.85, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+              {match.description}
+            </p>
+          ) : null}
+          <ZjSuggestionList items={match.suggestions} primary={primary}/>
+          {match.shareText ? (
+            <div style={{ marginTop: 18, padding: '12px 14px', background: `${primary}08`, borderRadius: 6, fontSize: 13, color: primary, lineHeight: 1.7 }}>
+              {match.shareText}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {isMatch && match?.map ? <ZjMatchMap map={match.map} primary={primary}/> : null}
+
+      {!model ? (
         <div className="gxa-report-panel" style={{ background: '#fff', borderRadius: 8, padding: 32, marginTop: 24, boxShadow: '0 2px 20px rgba(15,46,95,.04)', fontSize: 14, color: '#4A5A78', lineHeight: 1.8 }}>
           已成功提交本量表。详细解读可在管理端量表结果中查看，或稍后刷新本页。
         </div>
@@ -2147,18 +2395,18 @@ const StepReport = ({
       <div className="gxa-report-panel" style={{ background: '#fff', borderRadius: 8, padding: 40, marginTop: 24, boxShadow: '0 2px 20px rgba(15,46,95,.04)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
           <Icon name="sparkle" size={22} color={primary}/>
-          <h3 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#0F2E5F', fontFamily: '"Noto Serif SC", serif' }}>给你的 3 条个性化建议</h3>
+          <h3 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#0F2E5F', fontFamily: SERIF }}>给你的 3 条个性化建议</h3>
         </div>
         <p style={{ fontSize: 13, color: '#4A5A78', margin: '0 0 24px' }}>根据本次测评结果整理的关注重点</p>
 
         <div className="gxa-report-tips" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
           {suggestions.map((s, i) => (
             <div key={i} style={{ padding: 24, background: warm, borderRadius: 6, position: 'relative', minWidth: 0 }}>
-              <div style={{ position: 'absolute', top: 20, right: 20, fontSize: 42, opacity: .1, color: primary, fontFamily: '"Noto Serif SC", serif', lineHeight: 1 }}>{i + 1}</div>
+              <div style={{ position: 'absolute', top: 20, right: 20, fontSize: 42, opacity: .1, color: primary, fontFamily: SERIF, lineHeight: 1 }}>{i + 1}</div>
               <div style={{ width: 44, height: 44, borderRadius: 8, background: '#fff', color: primary, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
                 <Icon name={s.icon} size={22}/>
               </div>
-              <h4 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: '#0F2E5F', fontFamily: '"Noto Serif SC", serif', wordBreak: 'break-word' }}>{s.title}</h4>
+              <h4 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: '#0F2E5F', fontFamily: SERIF, wordBreak: 'break-word' }}>{s.title}</h4>
               <p style={{ fontSize: 13, color: '#4A5A78', lineHeight: 1.8, marginTop: 8, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{s.desc}</p>
               <a href="#" style={{ marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: primary, fontWeight: 500, textDecoration: 'none' }}>
                 {s.action} <Icon name="arrow" size={12}/>
@@ -2237,17 +2485,25 @@ const StepReport = ({
 };
 
 // ==================== 雷达图组件 ====================
-const RadarChart = ({ dimensions, primary }) => {
+function wrapRadarLabel(name, maxChars = 5) {
+  const text = String(name || '').replace(/^维度[一二三四五六七八九十\d]+[：:]\s*/, '').trim() || '维度';
+  const lines = [];
+  for (let index = 0; index < text.length; index += maxChars) {
+    lines.push(text.slice(index, index + maxChars));
+  }
+  return lines.slice(0, 2);
+}
+
+const RadarChart = ({ items, primary }) => {
   const size = 420;
   const cx = size / 2;
   const cy = size / 2;
   const maxR = 118;
-  const angles = dimensions.map(d => (d.angle * Math.PI) / 180);
+  const count = items.length;
+  const angles = items.map((_, index) => ((-90 + index * (360 / Math.max(count, 1))) * Math.PI) / 180);
 
-  const points = dimensions.map((d, i) => {
-    const radar = Number(d.radarScore);
-    const normalized = Number.isFinite(radar) ? radar : Number(d.score);
-    const r = (Math.max(0, Math.min(100, Number.isFinite(normalized) ? normalized : 0)) / 100) * maxR;
+  const points = items.map((item, i) => {
+    const r = clamp01(item.ratio) * maxR;
     return [cx + r * Math.cos(angles[i]), cy + r * Math.sin(angles[i])];
   });
   const pointsStr = points.map(p => p.join(',')).join(' ');
@@ -2263,25 +2519,22 @@ const RadarChart = ({ dimensions, primary }) => {
           const grid = angles.map(a => [cx + r * Math.cos(a), cy + r * Math.sin(a)]);
           return <polygon key={v} points={grid.map(p => p.join(',')).join(' ')} fill="none" stroke="#E8ECF3" strokeWidth="0.7"/>;
         })}
-        <text x={cx + 6} y={cy - maxR + 4} fontSize="9" fill="#8B96A8">100</text>
-        <text x={cx + 6} y={cy - maxR*0.5 + 4} fontSize="9" fill="#8B96A8">50</text>
         {axisEnd.map((p, i) => (
           <line key={i} x1={cx} y1={cy} x2={p[0]} y2={p[1]} stroke="#E8ECF3" strokeWidth="0.7"/>
         ))}
         <polygon points={pointsStr} fill={`${primary}25`} stroke={primary} strokeWidth="2"/>
         {points.map((p, i) => (
-          <circle key={i} cx={p[0]} cy={p[1]} r="5" fill="#fff" stroke={primary} strokeWidth="2.5"/>
+          <circle key={i} cx={p[0]} cy={p[1]} r="5" fill="#fff" stroke={toneStyle(items[i].tone, primary).color} strokeWidth="2.5"/>
         ))}
         {points.map((p, i) => {
-          const outward = 16;
           const x = p[0] + Math.cos(angles[i]) * 4;
-          const y = p[1] + Math.sin(angles[i]) * 4 - outward;
+          const y = p[1] + Math.sin(angles[i]) * 4 - 16;
           return (
-            <text key={i} x={x} y={y} textAnchor="middle" fontSize="11" fontWeight="700" fill={primary}>{dimensions[i].score}</text>
+            <text key={i} x={x} y={y} textAnchor="middle" fontSize="11" fontWeight="700" fill={toneStyle(items[i].tone, primary).color}>{formatVisualScore(items[i].score)}</text>
           );
         })}
         {labelPos.map((p, i) => {
-          const lines = wrapRadarLabel(dimensions[i].name);
+          const lines = wrapRadarLabel(items[i].label);
           return (
             <text key={i} x={p[0]} y={p[1] - ((lines.length - 1) * 7)} textAnchor="middle" fontSize="12" fontWeight="600" fill="#0F2E5F">
               {lines.map((line, lineIndex) => (

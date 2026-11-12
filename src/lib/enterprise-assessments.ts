@@ -3,6 +3,7 @@ import {
   resolveBrowserApiBaseUrl,
   resolvePublicBaseUrl,
 } from "@/lib/backend-env";
+import type { VisualAssessmentInput } from "@/lib/report-visual-model";
 
 export interface SiteHeroSlide {
   imageUrl: string;
@@ -56,6 +57,19 @@ export type EnterpriseAnswerValue =
   | { text: string }
   | { number: number };
 
+/** 结果页可视化需要的计分结构（区间、维度、总分、匹配结果、组合来源）。 */
+type EnterpriseAssessmentReportStructure = Pick<
+  VisualAssessmentInput,
+  | "scoringType"
+  | "scoringPreset"
+  | "scoreRanges"
+  | "dimensions"
+  | "totalScore"
+  | "matchResults"
+  | "composedFrom"
+  | "sourceReports"
+>;
+
 export interface EnterpriseAssessmentPayload extends SiteBranding {
   slug: string;
   loginRequired?: boolean;
@@ -65,7 +79,7 @@ export interface EnterpriseAssessmentPayload extends SiteBranding {
   /** 仅当前企业新增的字段定义，未勾选的不会出现在 employeeInfoFields 里 */
   customEmployeeInfoFields?: CustomEmployeeInfoField[];
   articles?: unknown;
-  assessments: Array<{
+  assessments: Array<EnterpriseAssessmentReportStructure & {
     id: string;
     version?: number;
     title: string;
@@ -370,6 +384,18 @@ export function toOnboardingScales(payload: EnterpriseAssessmentPayload) {
       question: assessment.instructions || "请根据你的实际情况完成以下题目",
       reportIntro: assessment.reportIntro || assessment.features || assessment.description || "",
       disclaimer: assessment.disclaimer || "",
+      // 结果页按量表类型选择可视化方案；风险维度只在后台，接口不会下发
+      report: {
+        scoringType: assessment.scoringType,
+        scoringPreset: assessment.scoringPreset,
+        questions: questions.map((question) => ({ id: question.id })),
+        scoreRanges: assessment.scoreRanges,
+        dimensions: assessment.dimensions,
+        totalScore: assessment.totalScore,
+        matchResults: assessment.matchResults,
+        composedFrom: assessment.composedFrom,
+        sourceReports: assessment.sourceReports,
+      } satisfies VisualAssessmentInput,
       items: questions.map((question) => ({
         id: question.id,
         text: question.text,
