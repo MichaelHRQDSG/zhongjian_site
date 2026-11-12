@@ -4,16 +4,20 @@ import React from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/shared/data';
 import type { AudioTrack } from '@/lib/audios';
+import { trackEnterpriseLearning } from '@/lib/enterprise-learning';
 import { tokens } from '@/lib/tokens';
 
 export function AudiosIndexPage({
   audios,
   homeHref = '/',
   siteName = '心安 EAP',
+  enterpriseSlug = '',
 }: {
   audios: AudioTrack[];
   homeHref?: string;
   siteName?: string;
+  /** 企业专属上下文：播放 / 听完会回传到企业定制数据管理 */
+  enterpriseSlug?: string;
 }) {
   const primary = tokens.primary;
   const primaryDark = tokens.primaryDark;
@@ -49,14 +53,22 @@ export function AudiosIndexPage({
           overflow: 'hidden',
         }}>
           <div style={{ position: 'absolute', top: -50, right: -40, width: 200, height: 200, borderRadius: '50%', background: 'rgba(255,255,255,.05)' }} />
-          <FullAudioPlayer audios={audios} primary={primary} />
+          <FullAudioPlayer audios={audios} primary={primary} enterpriseSlug={enterpriseSlug} />
         </div>
       </main>
     </div>
   );
 }
 
-function FullAudioPlayer({ audios, primary }: { audios: AudioTrack[]; primary: string }) {
+function FullAudioPlayer({
+  audios,
+  primary,
+  enterpriseSlug,
+}: {
+  audios: AudioTrack[];
+  primary: string;
+  enterpriseSlug: string;
+}) {
   const [currentIdx, setCurrentIdx] = React.useState(-1);
   const [playing, setPlaying] = React.useState(false);
   const [progress, setProgress] = React.useState(0);
@@ -65,20 +77,42 @@ function FullAudioPlayer({ audios, primary }: { audios: AudioTrack[]; primary: s
   React.useEffect(() => {
     const el = audioRef.current;
     if (!el) return;
+    const track = audios[currentIdx];
     const onTime = () => {
       if (el.duration) setProgress(el.currentTime / el.duration);
+    };
+    const onPlay = () => {
+      if (enterpriseSlug && track) {
+        trackEnterpriseLearning(enterpriseSlug, {
+          contentType: 'audio',
+          contentId: track.id,
+          contentTitle: track.title,
+          action: 'play',
+        });
+      }
     };
     const onEnd = () => {
       setPlaying(false);
       setProgress(0);
+      if (enterpriseSlug && track) {
+        trackEnterpriseLearning(enterpriseSlug, {
+          contentType: 'audio',
+          contentId: track.id,
+          contentTitle: track.title,
+          action: 'complete',
+          durationSec: Number.isFinite(el.duration) ? el.duration : undefined,
+        });
+      }
     };
     el.addEventListener('timeupdate', onTime);
+    el.addEventListener('play', onPlay);
     el.addEventListener('ended', onEnd);
     return () => {
       el.removeEventListener('timeupdate', onTime);
+      el.removeEventListener('play', onPlay);
       el.removeEventListener('ended', onEnd);
     };
-  }, [currentIdx]);
+  }, [audios, currentIdx, enterpriseSlug]);
 
   const safePlay = (el: HTMLAudioElement) => {
     const p = el.play();

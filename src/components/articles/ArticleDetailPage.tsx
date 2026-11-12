@@ -1,10 +1,41 @@
 'use client';
 
+import { useEffect } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/shared/data';
 import type { Article } from '@/lib/articles';
 import { withEnterpriseQuery } from '@/lib/enterprise-context';
+import { trackEnterpriseLearning } from '@/lib/enterprise-learning';
 import { tokens } from '@/lib/tokens';
+
+/** 企业站内打开图文时上报一次阅读，离开页面时补报阅读时长（不足 5 秒后台忽略）。 */
+function useArticleLearningTracker(enterpriseSlug: string, article: Article) {
+  useEffect(() => {
+    if (!enterpriseSlug) return;
+    const base = { contentType: 'article' as const, contentId: article.slug, contentTitle: article.title };
+    const startedAt = Date.now();
+    let reported = false;
+    trackEnterpriseLearning(enterpriseSlug, { ...base, action: 'view' });
+    const reportReading = () => {
+      if (reported) return;
+      reported = true;
+      const seconds = Math.round((Date.now() - startedAt) / 1000);
+      if (seconds >= 5) {
+        trackEnterpriseLearning(enterpriseSlug, { ...base, action: 'read', durationSec: seconds });
+      }
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') reportReading();
+    };
+    window.addEventListener('pagehide', reportReading);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('pagehide', reportReading);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      reportReading();
+    };
+  }, [enterpriseSlug, article.slug, article.title]);
+}
 
 export function ArticleDetailPage({
   article,
@@ -22,6 +53,7 @@ export function ArticleDetailPage({
   enterpriseSlug?: string;
 }) {
   const primary = tokens.primary;
+  useArticleLearningTracker(enterpriseSlug, article);
 
   return (
     <div style={{ minHeight: '100vh', background: '#fff', color: '#1A2846', fontFamily: '"Noto Sans SC", "PingFang SC", system-ui, sans-serif' }}>

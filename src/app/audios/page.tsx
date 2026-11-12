@@ -28,5 +28,12 @@ export default async function AudiosPage({
       redirect(nav.homeHref);
     }
   }
-  return <AudiosIndexPage audios={AUDIOS} siteName={branding.siteName} homeHref={nav.homeHref} />;
+  return (
+    <AudiosIndexPage
+      audios={AUDIOS}
+      siteName={branding.siteName}
+      homeHref={nav.homeHref}
+      enterpriseSlug={nav.enterpriseSlug}
+    />
+  );
 }

@@ -16,6 +16,7 @@ import {
   enterpriseSlugFromHomeHref,
   withEnterpriseQuery,
 } from '@/lib/enterprise-context';
+import { trackEnterpriseLearning } from '@/lib/enterprise-learning';
 import { SiteBeian } from '@/components/shared/SiteBeian';
 
 // 方案一：稳重经典 —— 深蓝主导
@@ -465,7 +466,7 @@ const DesignV1 = ({
                 </h3>
                 <a href={siteLink('/audios')} style={{ fontSize: 12, color: '#fff', textDecoration: 'none', opacity: .8 }}>更多 →</a>
               </div>
-              <AudioPlayerList audios={AUDIOS} primary={primary}/>
+              <AudioPlayerList audios={AUDIOS} primary={primary} enterpriseSlug={enterpriseSlug}/>
             </div>
           </div>
         </div>
@@ -706,7 +707,7 @@ const Footer = ({ branding, onboardingEntryLabel, onboardingHref = '/onboarding'
 };
 
 // ==================== 音频播放器组件 ====================
-const AudioPlayerList = ({ audios, primary }) => {
+const AudioPlayerList = ({ audios, primary, enterpriseSlug = '' }) => {
   const [currentIdx, setCurrentIdx] = React.useState(-1); // -1 = 无
   const [playing, setPlaying] = React.useState(false);
   const [progress, setProgress] = React.useState(0); // 0-1
@@ -715,17 +716,38 @@ const AudioPlayerList = ({ audios, primary }) => {
   React.useEffect(() => {
     const el = audioRef.current;
     if (!el) return;
+    const track = audios[currentIdx];
     const onTime = () => {
       if (el.duration) setProgress(el.currentTime / el.duration);
     };
-    const onEnd = () => { setPlaying(false); setProgress(0); };
+    // 企业专属首页：播放 / 听完回传到企业定制数据管理（普通首页 enterpriseSlug 为空，不上报）
+    const onPlay = () => {
+      if (enterpriseSlug && track?.id) {
+        trackEnterpriseLearning(enterpriseSlug, { contentType: 'audio', contentId: track.id, contentTitle: track.title, action: 'play' });
+      }
+    };
+    const onEnd = () => {
+      setPlaying(false);
+      setProgress(0);
+      if (enterpriseSlug && track?.id) {
+        trackEnterpriseLearning(enterpriseSlug, {
+          contentType: 'audio',
+          contentId: track.id,
+          contentTitle: track.title,
+          action: 'complete',
+          durationSec: Number.isFinite(el.duration) ? el.duration : undefined,
+        });
+      }
+    };
     el.addEventListener('timeupdate', onTime);
+    el.addEventListener('play', onPlay);
     el.addEventListener('ended', onEnd);
     return () => {
       el.removeEventListener('timeupdate', onTime);
+      el.removeEventListener('play', onPlay);
       el.removeEventListener('ended', onEnd);
     };
-  }, [currentIdx]);
+  }, [audios, currentIdx, enterpriseSlug]);
 
   const safePlay = (el) => {
     // 包裹一层 catch，避免"play() interrupted by load"污染控制台

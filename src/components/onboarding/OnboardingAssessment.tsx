@@ -5,6 +5,8 @@ import React from 'react';
 import { Icon } from '@/components/shared/data';
 import { SiteBeian } from '@/components/shared/SiteBeian';
 import { submitEnterpriseOnboardingReports } from '@/lib/enterprise-assessments';
+// 访客标识与知识库学习回传共用（localStorage `onb-visitor-{slug}`），后台据此把学习记录归到同一份员工档案
+import { createVisitorKey } from '@/lib/enterprise-learning';
 import {
   getOnboardingQuestionInputType,
   isDynamicQuestionAnswered,
@@ -24,15 +26,6 @@ const EMPTY_BASIC_FORM = {
   workLoc: '', joinDate: '',
   livingStatus: '', hasFamily: '',
 };
-
-function createVisitorKey() {
-  try {
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-      return crypto.randomUUID().replace(/-/g, '');
-    }
-  } catch {}
-  return `vk${Date.now().toString(36)}${Math.random().toString(36).slice(2, 14)}`;
-}
 
 function createSubmissionId() {
   try {
