@@ -37,6 +37,8 @@ export default async function EnterpriseHomePage({
       counselors={counselors.items}
       homeHref={`/${slug}`}
       onboardingHref={`/${slug}/onboarding`}
+      // 首页对未登录访客开放，但企业专属图文要登录后才下发，这里显示“登录后查看”
+      contentLocked={Boolean(branding.loginRequired && !branding.authenticated)}
     />
   );
 }

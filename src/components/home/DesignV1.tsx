@@ -42,6 +42,7 @@ const DesignV1 = ({
   onboardingHref = '/onboarding',
   counselors,
   articles,
+  contentLocked = false,
 }: {
   tweaks?: ThemeTweaks;
   branding?: SiteBranding | null;
@@ -49,6 +50,8 @@ const DesignV1 = ({
   onboardingHref?: string;
   counselors?: CounselorCard[];
   articles?: Article[];
+  /** 企业站未登录：首页照常展示，企业专属图文改为“登录后查看” */
+  contentLocked?: boolean;
 }) => {
   const [heroSlide, setHeroSlide] = React.useState(0);
   const primary = tweaks?.primary || '#1E4C9A';
@@ -437,6 +440,9 @@ const DesignV1 = ({
                 </h3>
                 <a href={siteLink('/articles')} style={{ fontSize: 12, color: primary, textDecoration: 'none' }}>更多 →</a>
               </div>
+              {contentLocked ? (
+                <LockedArticles primary={primary} href={siteLink('/articles')}/>
+              ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {homeArticles.map((a, i) => (
                   <a key={a.slug || i} href={siteLink(`/articles/${a.slug}`)} style={{ display: 'flex', gap: 16, textDecoration: 'none', color: 'inherit', padding: '14px 8px', borderRadius: 4, transition: 'background .2s', borderBottom: i < ARTICLES.length - 1 ? '1px solid #F0EBE0' : 'none' }} className="article-row">
@@ -453,6 +459,7 @@ const DesignV1 = ({
                   </a>
                 ))}
               </div>
+              )}
             </div>
 
             {/* 音频 */}
@@ -556,7 +563,7 @@ const DesignV1 = ({
                 ))}
               </div>
             </div>
-            <a href="/contact" style={{ background: primary, color: '#fff', border: 'none', padding: '16px 32px', borderRadius: 4, fontSize: 15, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, boxShadow: `0 10px 24px -10px ${primary}66`, textDecoration: 'none' }}>
+            <a href={siteLink('/contact')} style={{ background: primary, color: '#fff', border: 'none', padding: '16px 32px', borderRadius: 4, fontSize: 15, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, boxShadow: `0 10px 24px -10px ${primary}66`, textDecoration: 'none' }}>
               联系助理 <Icon name="arrow" size={16}/>
             </a>
           </div>
@@ -625,6 +632,35 @@ const SectionTitle = ({ eyebrow, title, desc, primary, align = 'center' }) => (
       {title}
     </h2>
     {desc && <p style={{ fontSize: 15, color: '#4A5A78', lineHeight: 1.9, marginTop: 20 }}>{desc}</p>}
+  </div>
+);
+
+// 未登录时的心理图文占位：模糊的列表骨架 + “登录查看”（点击即走二级页面登录流程）
+const LockedArticles = ({ primary, href }) => (
+  <div style={{ position: 'relative', borderRadius: 6, overflow: 'hidden' }}>
+    {[0, 1, 2].map((i) => (
+      <div key={i} aria-hidden="true" style={{ display: 'flex', gap: 16, padding: '14px 8px', borderBottom: i < 2 ? '1px solid #F0EBE0' : 'none', filter: 'blur(1.5px)', opacity: 0.6 }}>
+        <div style={{ width: 100, height: 70, flexShrink: 0, borderRadius: 4, background: 'linear-gradient(135deg, #E3E9F3 0%, #F3EDE3 100%)' }}/>
+        <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
+          <div style={{ width: 56, height: 16, borderRadius: 3, background: `${primary}14`, marginBottom: 10 }}/>
+          <div style={{ width: `${82 - i * 12}%`, height: 14, borderRadius: 3, background: '#E6EAF1', marginBottom: 8 }}/>
+          <div style={{ width: '38%', height: 11, borderRadius: 3, background: '#EEF1F6' }}/>
+        </div>
+      </div>
+    ))}
+    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 20, textAlign: 'center', background: 'linear-gradient(180deg, rgba(255,255,255,.5) 0%, rgba(255,255,255,.9) 55%)' }}>
+      <span style={{ width: 44, height: 44, borderRadius: '50%', background: `${primary}12`, color: primary, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/>
+          <path d="M8 10.5V7.8a4 4 0 0 1 8 0v2.7"/>
+        </svg>
+      </span>
+      <div style={{ fontSize: 15, fontWeight: 600, color: '#0F2E5F', fontFamily: '"Noto Serif SC", serif', letterSpacing: 1 }}>企业专属心理图文</div>
+      <div style={{ fontSize: 12, color: '#4A5A78' }}>登录后即可阅读全部文章</div>
+      <a href={href} style={{ marginTop: 6, background: primary, color: '#fff', padding: '9px 22px', borderRadius: 4, fontSize: 13, fontWeight: 500, textDecoration: 'none', boxShadow: `0 10px 20px -12px ${primary}` }}>
+        登录查看
+      </a>
+    </div>
   </div>
 );
 

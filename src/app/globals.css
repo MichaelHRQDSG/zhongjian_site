@@ -114,6 +114,70 @@ img {
   }
 }
 
+/* —— 企业站登录：首页弹窗（手机底部弹层）/ 二级页面整页登录 / 顶部登录条 —— */
+@keyframes zjLoginFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes zjLoginSheetUp {
+  from {
+    opacity: 0;
+    transform: translateY(32px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes zjLoginPop {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.zj-login-overlay {
+  animation: zjLoginFade 0.18s ease-out both;
+}
+
+.zj-login-sheet {
+  animation: zjLoginSheetUp 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  overscroll-behavior: contain;
+}
+
+.zj-login-rise {
+  animation: zjLoginPop 0.36s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.zj-session-bar {
+  animation: zjLoginFade 0.2s ease-out both;
+}
+
+@media (min-width: 640px) {
+  .zj-login-sheet {
+    animation-name: zjLoginPop;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zj-login-overlay,
+  .zj-login-sheet,
+  .zj-login-rise,
+  .zj-session-bar {
+    animation: none;
+  }
+}
+
 /* —— 手机端 / 平板端响应式 —— */
 @media (max-width: 1024px) {
   .gxa-hero {

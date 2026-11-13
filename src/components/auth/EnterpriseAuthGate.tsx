@@ -1,12 +1,22 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 
 import {
+  EnterpriseGateLoading,
+  EnterpriseLoginDialog,
+  EnterpriseLoginScreen,
+  EnterpriseSessionBar,
+  brandFromStatus,
+} from '@/components/auth/EnterpriseLogin';
+import {
   clearEnterpriseToken,
+  describeEnterpriseTarget,
   fetchEnterpriseAuthStatus,
-  loginEnterpriseSite,
+  isEnterpriseHomePath,
+  protectedNavigationTarget,
+  readEnterpriseToken,
   type EnterpriseAuthStatus,
 } from '@/lib/enterprise-auth';
 import {
@@ -14,6 +24,25 @@ import {
   normalizeEnterpriseSlug,
 } from '@/lib/enterprise-context';
 
+/** 状态接口不可用时与原逻辑一致：放行页面，真正的数据仍由后端按登录态控制。 */
+const UNREACHABLE_STATUS: EnterpriseAuthStatus = {
+  loginRequired: false,
+  authenticated: true,
+  siteName: '',
+  companyName: '',
+  logoUrl: '',
+  slogan: '',
+  profile: null,
+};
+
+type LoadedAuth = { slug: string; status: EnterpriseAuthStatus; token: string };
+
+/**
+ * 企业定制站登录：
+ * - 企业首页 `/{slug}` 不需要登录，直接展示；
+ * - 在首页点击任何二级页面（测评、图文、咨询师、EAP 服务等）时弹出登录，登录后直达该页面；
+ * - 直接打开二级页面链接（含刷新、分享链接）时显示整页登录。
+ */
 export function EnterpriseAuthGate({
   apiBaseUrl,
   children,
@@ -23,141 +52,145 @@ export function EnterpriseAuthGate({
 }) {
   const pathname = usePathname() || '/';
   const searchParams = useSearchParams();
-  const slug = useMemo(() => {
-    const first = pathname.replace(/^\//, '').split('/')[0];
-    return normalizeEnterpriseSlug(first) || normalizeEnterpriseSlug(searchParams.get(ENTERPRISE_QUERY_KEY));
-  }, [pathname, searchParams]);
+  const pathSlug = useMemo(
+    () => normalizeEnterpriseSlug(pathname.replace(/^\//, '').split('/')[0]),
+    [pathname],
+  );
+  const slug = pathSlug || normalizeEnterpriseSlug(searchParams.get(ENTERPRISE_QUERY_KEY));
+  const isHome = Boolean(pathSlug) && isEnterpriseHomePath(pathname, pathSlug);
 
-  const [status, setStatus] = useState<EnterpriseAuthStatus | null>(null);
-  const [loading, setLoading] = useState(Boolean(slug));
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const [auth, setAuth] = useState<LoadedAuth | null>(null);
+  // undefined = 未打开；null = 从顶部“登录”按钮打开（无目标页）；字符串 = 登录后要前往的地址
+  const [loginTarget, setLoginTarget] = useState<string | null | undefined>(undefined);
 
   useEffect(() => {
-    if (!slug) {
-      setStatus(null);
-      setLoading(false);
-      return;
-    }
+    if (!slug) return undefined;
     let cancelled = false;
-    setLoading(true);
+    const token = readEnterpriseToken(slug);
     fetchEnterpriseAuthStatus(apiBaseUrl, slug)
-      .then((next) => {
-        if (!cancelled) setStatus(next);
+      .then((status) => {
+        if (!cancelled) setAuth({ slug, status, token });
       })
       .catch(() => {
-        if (!cancelled) {
-          setStatus({
-            loginRequired: false,
-            authenticated: true,
-            siteName: '',
-            companyName: '',
-            logoUrl: '',
-            slogan: '',
-            profile: null,
-          });
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setAuth({ slug, status: UNREACHABLE_STATUS, token });
       });
     return () => {
       cancelled = true;
     };
   }, [apiBaseUrl, slug]);
 
+  const status = auth && auth.slug === slug ? auth.status : null;
+  const needsLogin = Boolean(status?.loginRequired && !status.authenticated);
+  const loadedToken = auth && auth.slug === slug ? auth.token : '';
+
+  // 首页：拦截指向二级页面的站内链接，先弹登录（新标签页打开等带修饰键的点击照常放行，由目标页整页登录兜底）
+  useEffect(() => {
+    if (!slug || !isHome || !needsLogin) return undefined;
+    const onClick = (event: MouseEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      ) {
+        return;
+      }
+      const anchor = event.target instanceof Element ? event.target.closest('a[href]') : null;
+      if (!(anchor instanceof HTMLAnchorElement) || anchor.hasAttribute('download')) return;
+      const target = (anchor.getAttribute('target') || '').toLowerCase();
+      if (target && target !== '_self') return;
+      const next = protectedNavigationTarget(anchor.href, slug, window.location.origin);
+      if (!next) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setLoginTarget(next);
+    };
+    // 捕获阶段挂在 window 上，先于页面里的链接 / React 事件处理
+    window.addEventListener('click', onClick, true);
+    return () => window.removeEventListener('click', onClick, true);
+  }, [isHome, needsLogin, slug]);
+
+  // 浏览器“后退”从往返缓存恢复页面时，弹窗可能还开着；若期间登录 / 退出过就整页刷新
+  useEffect(() => {
+    if (!slug) return undefined;
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (!event.persisted) return;
+      setLoginTarget(undefined);
+      if (readEnterpriseToken(slug) !== loadedToken) window.location.reload();
+    };
+    window.addEventListener('pageshow', onPageShow);
+    return () => window.removeEventListener('pageshow', onPageShow);
+  }, [loadedToken, slug]);
+
+  const closeLogin = useCallback(() => setLoginTarget(undefined), []);
+
   if (!slug) return <>{children}</>;
-  if (loading) {
+
+  const brand = brandFromStatus(status);
+  const homeHref = `/${slug}`;
+  const logout = () => {
+    clearEnterpriseToken(slug);
+    // 二级页面都需要登录，退出后回到首页
+    if (isHome) window.location.reload();
+    else window.location.assign(homeHref);
+  };
+
+  if (isHome) {
     return (
-      <div className="grid min-h-screen place-items-center bg-[var(--color-warm-light)] text-sm text-[var(--color-text-muted)]">
-        正在进入企业站点...
-      </div>
+      <>
+        {status?.loginRequired ? (
+          <EnterpriseSessionBar
+            brand={brand}
+            profile={status.authenticated ? status.profile : null}
+            onLogin={() => setLoginTarget(null)}
+            onLogout={logout}
+          />
+        ) : null}
+        {children}
+        {needsLogin && loginTarget !== undefined ? (
+          <EnterpriseLoginDialog
+            apiBaseUrl={apiBaseUrl}
+            brand={brand}
+            slug={slug}
+            targetLabel={loginTarget ? describeEnterpriseTarget(loginTarget) : ''}
+            onClose={closeLogin}
+            onSuccess={() => {
+              // 整页跳转，让服务端组件带上新的登录 Cookie 重新渲染
+              if (loginTarget) window.location.assign(loginTarget);
+              else window.location.reload();
+            }}
+          />
+        ) : null}
+      </>
     );
   }
-  if (status?.loginRequired && !status.authenticated) {
-    const siteName = status.siteName || '企业 EAP';
+
+  if (!status) return <EnterpriseGateLoading />;
+
+  if (needsLogin) {
     return (
-      <div className="min-h-screen bg-[var(--color-warm-light)]">
-        <header className="bg-[var(--color-primary-dark)] px-6 py-5 text-white">
-          <div className="mx-auto flex max-w-md items-center gap-3">
-            {status.logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img alt="" className="h-10 w-10 rounded bg-white object-contain p-1" src={status.logoUrl} />
-            ) : null}
-            <div>
-              <div className="text-base font-medium">{siteName}</div>
-              <div className="text-xs text-white/70">{status.companyName || '请使用企业下发的账号登录'}</div>
-            </div>
-          </div>
-        </header>
-        <main className="mx-auto max-w-md px-6 py-12">
-          <form
-            className="rounded-2xl border border-[var(--color-border-1)] bg-white p-6"
-            onSubmit={(event) => {
-              event.preventDefault();
-              setError('');
-              setSubmitting(true);
-              void loginEnterpriseSite(apiBaseUrl, slug, username.trim(), password)
-                .then(() => window.location.reload())
-                .catch((err) => setError(err instanceof Error ? err.message : '登录失败'))
-                .finally(() => setSubmitting(false));
-            }}
-          >
-            <h1 className="text-lg font-semibold text-[var(--color-text-strong)]">登录后进入站点</h1>
-            <p className="mt-2 text-sm text-[var(--color-text-muted)]">
-              使用本企业人员表中的账号和密码。此登录仅对本企业定制网页有效。
-            </p>
-            <label className="mt-5 block text-xs text-[var(--color-text-muted)]">
-              账号
-              <input
-                autoComplete="username"
-                className="mt-2 h-11 w-full rounded-xl border border-[var(--color-border-1)] px-3 text-sm outline-none focus:border-[var(--color-primary)]"
-                value={username}
-                onChange={(event) => setUsername(event.target.value)}
-              />
-            </label>
-            <label className="mt-4 block text-xs text-[var(--color-text-muted)]">
-              密码
-              <input
-                autoComplete="current-password"
-                className="mt-2 h-11 w-full rounded-xl border border-[var(--color-border-1)] px-3 text-sm outline-none focus:border-[var(--color-primary)]"
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-            </label>
-            {error ? <p className="mt-3 text-sm text-[var(--color-accent)]">{error}</p> : null}
-            <button
-              className="mt-6 h-11 w-full rounded-xl bg-[var(--color-primary)] text-sm font-medium text-white disabled:opacity-60"
-              disabled={submitting || !username.trim() || !password}
-              type="submit"
-            >
-              {submitting ? '登录中...' : '登录'}
-            </button>
-          </form>
-        </main>
-      </div>
+      <EnterpriseLoginScreen
+        apiBaseUrl={apiBaseUrl}
+        brand={brand}
+        homeHref={homeHref}
+        slug={slug}
+        targetLabel={describeEnterpriseTarget(pathname)}
+        onSuccess={() => window.location.reload()}
+      />
     );
   }
 
   return (
     <>
-      {status?.loginRequired && status.profile ? (
-        <div className="flex items-center justify-end gap-3 bg-[var(--color-primary-dark)] px-4 py-2 text-xs text-white/80">
-          <span>已登录：{status.profile.realName || status.profile.username}</span>
-          <button
-            className="underline decoration-white/40 underline-offset-2"
-            type="button"
-            onClick={() => {
-              clearEnterpriseToken(slug);
-              window.location.reload();
-            }}
-          >
-            退出
-          </button>
-        </div>
+      {status.loginRequired && status.profile ? (
+        <EnterpriseSessionBar
+          brand={brand}
+          profile={status.profile}
+          onLogin={() => undefined}
+          onLogout={logout}
+        />
       ) : null}
       {children}
     </>
