@@ -593,11 +593,14 @@ export function EnterpriseSessionBar({
   profile,
   onLogin,
   onLogout,
+  onManageProfile,
 }: {
   brand: EnterpriseLoginBrand;
   profile: EnterpriseSiteProfile | null;
   onLogin: () => void;
   onLogout: () => void;
+  /** 点击账号名：打开个人信息管理 */
+  onManageProfile?: () => void;
 }) {
   const displayName = profile ? (profile.realName || profile.username || '').trim() || '员工' : '';
   return (
@@ -609,12 +612,21 @@ export function EnterpriseSessionBar({
         </div>
         {profile ? (
           <div className="flex shrink-0 items-center gap-3">
-            <span className="flex min-w-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={onManageProfile}
+              title="管理个人信息"
+              className="flex min-w-0 items-center gap-2 rounded-full px-1.5 py-0.5 text-left transition hover:bg-white/10"
+              disabled={!onManageProfile}
+              style={{ cursor: onManageProfile ? 'pointer' : 'default' }}
+            >
               <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-white/15 text-[11px] font-semibold">
                 {Array.from(displayName)[0]}
               </span>
-              <span className="max-w-[8em] truncate text-white/90">{displayName}</span>
-            </span>
+              <span className="max-w-[8em] truncate text-white/90 underline-offset-2 hover:underline">
+                {displayName}
+              </span>
+            </button>
             <button
               className="text-white/60 underline-offset-2 transition hover:text-white hover:underline"
               type="button"

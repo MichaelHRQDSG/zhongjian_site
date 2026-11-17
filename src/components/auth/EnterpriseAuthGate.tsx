@@ -10,6 +10,7 @@ import {
   EnterpriseSessionBar,
   brandFromStatus,
 } from '@/components/auth/EnterpriseLogin';
+import { EnterpriseProfileDialog } from '@/components/auth/EnterpriseProfileDialog';
 import {
   clearEnterpriseToken,
   describeEnterpriseTarget,
@@ -63,6 +64,7 @@ export function EnterpriseAuthGate({
   const [auth, setAuth] = useState<LoadedAuth | null>(null);
   // undefined = 未打开；null = 从顶部“登录”按钮打开（无目标页）；字符串 = 登录后要前往的地址
   const [loginTarget, setLoginTarget] = useState<string | null | undefined>(undefined);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   useEffect(() => {
     if (!slug) return undefined;
@@ -148,6 +150,11 @@ export function EnterpriseAuthGate({
             profile={status.authenticated ? status.profile : null}
             onLogin={() => setLoginTarget(null)}
             onLogout={logout}
+            onManageProfile={
+              status.authenticated && status.profile
+                ? () => setProfileOpen(true)
+                : undefined
+            }
           />
         ) : null}
         {children}
@@ -163,6 +170,14 @@ export function EnterpriseAuthGate({
               if (loginTarget) window.location.assign(loginTarget);
               else window.location.reload();
             }}
+          />
+        ) : null}
+        {status?.authenticated && status.profile ? (
+          <EnterpriseProfileDialog
+            apiBaseUrl={apiBaseUrl}
+            slug={slug}
+            open={profileOpen}
+            onClose={() => setProfileOpen(false)}
           />
         ) : null}
       </>
@@ -192,9 +207,18 @@ export function EnterpriseAuthGate({
           profile={status.profile}
           onLogin={() => undefined}
           onLogout={logout}
+          onManageProfile={() => setProfileOpen(true)}
         />
       ) : null}
       {children}
+      {status.loginRequired && status.profile ? (
+        <EnterpriseProfileDialog
+          apiBaseUrl={apiBaseUrl}
+          slug={slug}
+          open={profileOpen}
+          onClose={() => setProfileOpen(false)}
+        />
+      ) : null}
     </>
   );
 }

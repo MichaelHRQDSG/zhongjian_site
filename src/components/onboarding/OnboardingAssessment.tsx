@@ -6,7 +6,15 @@ import { Icon } from '@/components/shared/data';
 import { SiteBeian } from '@/components/shared/SiteBeian';
 import { submitEnterpriseOnboardingReports } from '@/lib/enterprise-assessments';
 // 访客标识按账号隔离（`onb-visitor-{slug}-a-{accountId}`），与知识库学习回传共用
-import { writeEnterpriseAccountId } from '@/lib/enterprise-auth';
+import {
+  fetchEnterpriseAuthStatus,
+  readEnterpriseAccountId,
+  writeEnterpriseAccountId,
+} from '@/lib/enterprise-auth';
+import {
+  EMPTY_EMPLOYEE_INFO_FORM,
+  isEmployeeInfoComplete,
+} from '@/lib/enterprise-employee-info';
 import {
   OnboardingProgressConflictError,
   fetchEnterpriseOnboardingProgress,
@@ -35,12 +43,7 @@ const ALLOWED_ONBOARDING_STEPS = new Set(['welcome', 'basic', 'select', 'scale',
 // 员工心理测评 · 完整流程页面
 // 步骤：欢迎 → 基础信息（含知情同意）→ 量表选择 → 单量表作答 → 量表结果 → 返回继续选择
 
-const EMPTY_BASIC_FORM = {
-  empNo: '', name: '', gender: '', age: '', edu: '',
-  dept: '', post: '', category: '',
-  workLoc: '', joinDate: '',
-  livingStatus: '', hasFamily: '',
-};
+const EMPTY_BASIC_FORM = { ...EMPTY_EMPLOYEE_INFO_FORM };
 
 function createSubmissionId() {
   try {
@@ -85,7 +88,34 @@ const OnboardingAssessment = ({
   const accent = tweaks?.accent || '#C8161D';
   const warm = tweaks?.warm || '#F5EFE6';
   const activeScales = Array.isArray(scales) && scales.length > 0 ? scales : SCALES;
-  const storageScope = onboardingStorageScope(slug || companyName || 'default', accountId);
+
+  // SSR 可能拿不到 cookie → accountId 为空；客户端再解析一次，否则跨设备进度永远不同步
+  const [resolvedAccountId, setResolvedAccountId] = React.useState(accountId ?? null);
+  React.useEffect(() => {
+    if (!slug) return undefined;
+    if (accountId) {
+      writeEnterpriseAccountId(slug, accountId);
+      setResolvedAccountId(accountId);
+      return undefined;
+    }
+    const cached = readEnterpriseAccountId(slug);
+    if (cached) {
+      setResolvedAccountId(cached);
+      return undefined;
+    }
+    let cancelled = false;
+    fetchEnterpriseAuthStatus(apiBaseUrl, slug)
+      .then((status) => {
+        const id = status?.profile?.id;
+        if (cancelled || !id) return;
+        writeEnterpriseAccountId(slug, id);
+        setResolvedAccountId(id);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [accountId, apiBaseUrl, slug]);
+
+  const storageScope = onboardingStorageScope(slug || companyName || 'default', resolvedAccountId);
   const {
     progressKey,
     answersKey,
@@ -93,8 +123,8 @@ const OnboardingAssessment = ({
     completedKey,
     resultsKey,
     visitorKeyStorage,
-  } = onboardingStorageKeys(storageScope, slug, accountId);
-  const syncToServer = Boolean(slug && accountId);
+  } = onboardingStorageKeys(storageScope, slug, resolvedAccountId);
+  const syncToServer = Boolean(slug && resolvedAccountId);
 
   // 服务端与首屏客户端统一从 welcome 开始，避免 localStorage 造成 hydration 报错
   const [step, setStep] = React.useState('welcome');
@@ -111,6 +141,7 @@ const OnboardingAssessment = ({
   const submittingRef = React.useRef(false);
   const serverUpdatedAtRef = React.useRef(null);
   const suppressServerSyncRef = React.useRef(true);
+  const basicComplete = isEmployeeInfoComplete(basicForm, employeeInfoFields);
 
   const activeScale = React.useMemo(
     () => activeScales.find((s) => s?.id === activeScaleId) || null,
@@ -154,13 +185,23 @@ const OnboardingAssessment = ({
   }, []);
 
   const applyProgressSnapshot = React.useCallback((snap: OnboardingProgressSnapshot) => {
-    const restored = normalizeRestorableStep(snap.step);
+    const basicInfo =
+      snap.basicInfo && typeof snap.basicInfo === 'object'
+        ? { ...EMPTY_BASIC_FORM, ...snap.basicInfo }
+        : null;
+    if (basicInfo) setBasicForm(basicInfo);
+
+    let restored = normalizeRestorableStep(snap.step);
+    // 基本信息已齐：不再停在 welcome/basic，直接进入量表选择
+    if (
+      isEmployeeInfoComplete(basicInfo || snap.basicInfo, employeeInfoFields)
+      && (!restored || restored === 'welcome' || restored === 'basic')
+    ) {
+      restored = 'select';
+    }
     if (restored) setStep(restored);
     if (snap.answersByScale && typeof snap.answersByScale === 'object') {
       setAnswersByScale(snap.answersByScale);
-    }
-    if (snap.basicInfo && typeof snap.basicInfo === 'object') {
-      setBasicForm({ ...EMPTY_BASIC_FORM, ...snap.basicInfo });
     }
     if (Array.isArray(snap.completedScaleIds)) {
       setCompletedScaleIds(snap.completedScaleIds.map(String));
@@ -170,7 +211,7 @@ const OnboardingAssessment = ({
     }
     if (snap.activeScaleId) setActiveScaleId(String(snap.activeScaleId));
     serverUpdatedAtRef.current = snap.updatedAt || null;
-  }, [normalizeRestorableStep]);
+  }, [employeeInfoFields, normalizeRestorableStep]);
 
   const buildProgressPutBody = React.useCallback((overrides = {}) => {
     const nextCompleted = overrides.completedScaleIds || completedScaleIds;
@@ -234,26 +275,35 @@ const OnboardingAssessment = ({
 
   React.useEffect(() => {
     let cancelled = false;
+    setProgressReady(false);
+    suppressServerSyncRef.current = true;
     (async () => {
       try {
-        if (accountId && slug) {
-          writeEnterpriseAccountId(slug, accountId);
+        if (resolvedAccountId && slug) {
+          writeEnterpriseAccountId(slug, resolvedAccountId);
           purgeLegacySharedOnboardingKeys(slug);
         }
-        let saved = localStorage.getItem(progressKey);
-        const restored = normalizeRestorableStep(saved);
+        let localBasic = null;
+        const savedBasic = localStorage.getItem(basicKey);
+        if (savedBasic) {
+          const parsed = JSON.parse(savedBasic);
+          if (parsed && typeof parsed === 'object') {
+            localBasic = { ...EMPTY_BASIC_FORM, ...parsed };
+            setBasicForm(localBasic);
+          }
+        }
+        let restored = normalizeRestorableStep(localStorage.getItem(progressKey));
+        if (
+          isEmployeeInfoComplete(localBasic, employeeInfoFields)
+          && (!restored || restored === 'welcome' || restored === 'basic')
+        ) {
+          restored = 'select';
+        }
         if (restored) setStep(restored);
         const savedAnswers = localStorage.getItem(answersKey);
         if (savedAnswers) {
           const parsed = JSON.parse(savedAnswers);
           if (parsed && typeof parsed === 'object') setAnswersByScale(parsed);
-        }
-        const savedBasic = localStorage.getItem(basicKey);
-        if (savedBasic) {
-          const parsed = JSON.parse(savedBasic);
-          if (parsed && typeof parsed === 'object') {
-            setBasicForm({ ...EMPTY_BASIC_FORM, ...parsed });
-          }
         }
         const savedCompleted = localStorage.getItem(completedKey);
         if (savedCompleted) {
@@ -266,7 +316,7 @@ const OnboardingAssessment = ({
           if (parsed && typeof parsed === 'object') setResultsByScale(parsed);
         }
         const key = slug
-          ? getEnterpriseVisitorKey(slug, accountId)
+          ? getEnterpriseVisitorKey(slug, resolvedAccountId)
           : (() => {
               let local = localStorage.getItem(visitorKeyStorage) || '';
               if (local.length < 8) {
@@ -279,14 +329,24 @@ const OnboardingAssessment = ({
 
         if (syncToServer && slug) {
           const remote = await fetchEnterpriseOnboardingProgress(apiBaseUrl, slug);
-          // 服务端已按正式答卷校准；有进度行或有已提交报告都应用
-          if (!cancelled && remote && (remote.exists || (remote.completedScaleIds || []).length > 0)) {
+          // 有进度行、已提交报告，或已有 basicInfo 时都应用（跨设备续答）
+          const hasRemote =
+            remote
+            && (
+              remote.exists
+              || (remote.completedScaleIds || []).length > 0
+              || isEmployeeInfoComplete(remote.basicInfo, employeeInfoFields)
+              || (remote.answersByScale && Object.keys(remote.answersByScale).length > 0)
+            );
+          if (!cancelled && hasRemote) {
             applyProgressSnapshot(remote);
+          } else if (!cancelled && remote?.updatedAt) {
+            serverUpdatedAtRef.current = remote.updatedAt;
           }
         }
       } catch {
         if (!cancelled) {
-          const key = slug ? getEnterpriseVisitorKey(slug, accountId) : createVisitorKey();
+          const key = slug ? getEnterpriseVisitorKey(slug, resolvedAccountId) : createVisitorKey();
           setVisitorKey(key);
         }
       } finally {
@@ -298,14 +358,15 @@ const OnboardingAssessment = ({
     })();
     return () => { cancelled = true; };
   }, [
-    accountId,
     answersKey,
     apiBaseUrl,
     applyProgressSnapshot,
     basicKey,
     completedKey,
+    employeeInfoFields,
     normalizeRestorableStep,
     progressKey,
+    resolvedAccountId,
     resultsKey,
     slug,
     syncToServer,
@@ -633,7 +694,7 @@ const OnboardingAssessment = ({
             accent={accent}
             companyName={companyName}
             slogan={slogan}
-            onNext={() => goto('basic')}
+            onNext={() => goto(basicComplete ? 'select' : 'basic')}
           />
         )}
         {step === 'basic' && (
@@ -644,7 +705,11 @@ const OnboardingAssessment = ({
             customFields={customEmployeeInfoFields}
             form={basicForm}
             setForm={setBasicForm}
-            onNext={() => goto('select')}
+            onNext={() => {
+              goto('select');
+              // 首次填完立刻落库，换设备可跳过基本信息
+              void flushProgressToServer({ step: 'select', basicInfo: basicForm }, { retry: true });
+            }}
             onBack={() => goto('welcome')}
           />
         )}
@@ -656,7 +721,7 @@ const OnboardingAssessment = ({
             primary={primary}
             primaryDark={primaryDark}
             homeHref={homeHref}
-            onBack={() => goto('basic')}
+            onBack={() => goto(basicComplete ? 'welcome' : 'basic')}
             onStart={openScale}
             onViewResult={openScaleResult}
           />
