@@ -56,6 +56,11 @@ const PROGRESS_PREFIXES = [
   "onb-basic-",
   "onb-completed-",
   "onb-results-",
+  // 本机暂存（见 onboarding-draft.ts）：续答位置、重答草稿、待提交编号、本机保存时间
+  "onb-resume-",
+  "onb-retake-",
+  "onb-pending-",
+  "onb-saved-at-",
 ] as const;
 
 /** 登录账号隔离 scope；无账号时退回 slug（访客仅本机）。 */

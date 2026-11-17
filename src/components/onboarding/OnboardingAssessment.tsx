@@ -26,6 +26,19 @@ import {
   type OnboardingProgressSnapshot,
 } from '@/lib/enterprise-onboarding-progress';
 import { createVisitorKey, getEnterpriseVisitorKey } from '@/lib/enterprise-learning';
+import {
+  countAnsweredItems,
+  firstUnansweredIndex,
+  isLocalDraftNewer,
+  mergeAnswersByScale,
+  onboardingDraftKeys,
+  readStoredJson,
+  resolveSubmissionId,
+  sameAnswers,
+  submissionSignature,
+  writeStoredJson,
+} from '@/lib/onboarding-draft';
+import { downloadOnboardingReportPdf, isWeChatBrowser } from '@/lib/download-report-pdf';
 import { bandForScore, buildReportVisualModel, formatVisualScore } from '@/lib/report-visual-model';
 import {
   getOnboardingQuestionInputType,
@@ -124,6 +137,8 @@ const OnboardingAssessment = ({
     resultsKey,
     visitorKeyStorage,
   } = onboardingStorageKeys(storageScope, slug, resolvedAccountId);
+  // 本机暂存：续答位置 / 重答草稿 / 待提交编号 / 本机最后作答时间（见 lib/onboarding-draft.ts）
+  const { resumeKey, savedAtKey, retakeKey, pendingKey } = onboardingDraftKeys(storageScope);
   const syncToServer = Boolean(slug && resolvedAccountId);
 
   // 服务端与首屏客户端统一从 welcome 开始，避免 localStorage 造成 hydration 报错
@@ -138,6 +153,13 @@ const OnboardingAssessment = ({
   const [submitError, setSubmitError] = React.useState('');
   const [submitting, setSubmitting] = React.useState(false);
   const [syncNotice, setSyncNotice] = React.useState('');
+  // 已完成量表的重新作答：答案单独存本机，提交成功前不动原答案与原结果
+  const [retakeDrafts, setRetakeDrafts] = React.useState({});
+  // 当前作答页是否为重答（打开量表时确定，避免作答途中被同步状态切换）
+  const [retakeScaleId, setRetakeScaleId] = React.useState('');
+  // 刷新 / 重新打开后自动回到的作答位置（用于提示与定位到第一道未答题）
+  const [resumeInfo, setResumeInfo] = React.useState(null);
+  const [draftNotice, setDraftNotice] = React.useState('');
   const submittingRef = React.useRef(false);
   const serverUpdatedAtRef = React.useRef(null);
   const suppressServerSyncRef = React.useRef(true);
@@ -163,14 +185,28 @@ const OnboardingAssessment = ({
     return Array.from(ids);
   }, [completedScaleIds, resultsByScale]);
   const completedCount = completedIdsForUi.length;
-  const inProgressScaleIds = React.useMemo(() => {
-    const done = new Set((completedScaleIds || []).map(String));
-    return Object.keys(answersByScale || {}).filter((id) => {
-      if (done.has(String(id))) return false;
-      const answers = answersByScale[id];
-      return Boolean(answers && typeof answers === 'object' && Object.keys(answers).length > 0);
+  const retakeMode = Boolean(activeScaleId) && retakeScaleId === activeScaleId;
+  /** 选择页上每张量表的暂存情况：首次作答的进度，或已完成量表的重答进度（按当前题目定义计数） */
+  const draftStatusByScale = React.useMemo(() => {
+    const done = new Set(completedIdsForUi.map(String));
+    const status = {};
+    activeScales.forEach((scale) => {
+      if (!scale?.id) return;
+      const id = String(scale.id);
+      if (done.has(id)) {
+        const draft = retakeDrafts[id];
+        if (draft) status[id] = { retake: true, ...countAnsweredItems(scale, draft.answers) };
+        return;
+      }
+      const counts = countAnsweredItems(scale, answersByScale[id]);
+      if (counts.answered > 0) status[id] = { retake: false, ...counts };
     });
-  }, [answersByScale, completedScaleIds]);
+    return status;
+  }, [activeScales, answersByScale, completedIdsForUi, retakeDrafts]);
+  const inProgressScaleIds = React.useMemo(
+    () => Object.keys(draftStatusByScale).filter((id) => !draftStatusByScale[id].retake),
+    [draftStatusByScale],
+  );
   const allDone = activeScales.length > 0 && completedCount >= activeScales.length;
   const reportScales = React.useMemo(() => {
     if (activeScale) return [activeScale];
@@ -192,7 +228,9 @@ const OnboardingAssessment = ({
     doneAfter.add(activeScaleId);
     return activeScales.some((s) => s?.id && !doneAfter.has(s.id));
   }, [activeScaleId, activeScales, completedIdsForUi]);
-  const scaleSubmitLabel = hasMoreScalesAfterSubmit ? '继续作答 →' : '提交作答结果 →';
+  const scaleSubmitLabel = retakeMode
+    ? '提交重新作答 →'
+    : (hasMoreScalesAfterSubmit ? '继续作答 →' : '提交作答结果 →');
 
   const normalizeRestorableStep = React.useCallback((raw) => {
     let saved = String(raw || '');
@@ -206,43 +244,64 @@ const OnboardingAssessment = ({
     return null;
   }, []);
 
-  const applyProgressSnapshot = React.useCallback((snap: OnboardingProgressSnapshot) => {
-    const basicInfo =
-      snap.basicInfo && typeof snap.basicInfo === 'object'
-        ? { ...EMPTY_BASIC_FORM, ...snap.basicInfo }
-        : null;
-    if (basicInfo) setBasicForm(basicInfo);
-
-    let restored = normalizeRestorableStep(snap.step);
-    // 基本信息已齐：不再停在 welcome/basic，直接进入量表选择
-    if (
-      isEmployeeInfoComplete(basicInfo || snap.basicInfo, employeeInfoFields)
-      && (!restored || restored === 'welcome' || restored === 'basic')
-    ) {
-      restored = 'select';
-    }
+  /**
+   * 套用云端进度快照。mode：
+   * - 'restore'：首次加载（调用方已把本机与云端作答合并好），整体套用；
+   * - 'conflict'：其他设备更新过（409），作答按题合并、本机新输入优先，不切走当前作答的量表；
+   * - 'ack'：本机 PUT 成功的回执。请求途中用户可能又答了题、改了基本信息或换了量表，回执是发出时的
+   *   旧快照，只能校准完成态 / 结果 / 版本号，不能回写作答、基本信息、步骤和当前量表，否则会“吞掉”新输入。
+   * 完成态与结果只增不减（并集），避免先发后到的旧回执把刚提交的量表又标回未完成。
+   */
+  const applyProgressSnapshot = React.useCallback((snap: OnboardingProgressSnapshot, mode = 'restore') => {
     const answering = stepRef.current === 'scale' || stepRef.current === 'scaleResult';
-    if (restored && !answering) setStep(restored);
-    if (snap.answersByScale && typeof snap.answersByScale === 'object') {
-      setAnswersByScale(snap.answersByScale);
+    if (mode !== 'ack') {
+      const basicInfo =
+        snap.basicInfo && typeof snap.basicInfo === 'object'
+          ? { ...EMPTY_BASIC_FORM, ...snap.basicInfo }
+          : null;
+      if (basicInfo) setBasicForm(basicInfo);
+
+      let restored = normalizeRestorableStep(snap.step);
+      // 基本信息已齐：不再停在 welcome/basic，直接进入量表选择
+      if (
+        isEmployeeInfoComplete(basicInfo || snap.basicInfo, employeeInfoFields)
+        && (!restored || restored === 'welcome' || restored === 'basic')
+      ) {
+        restored = 'select';
+      }
+      if (restored && !answering) setStep(restored);
+      if (snap.answersByScale && typeof snap.answersByScale === 'object') {
+        if (mode === 'conflict') {
+          setAnswersByScale((current) => mergeAnswersByScale(snap.answersByScale, current));
+        } else {
+          setAnswersByScale(snap.answersByScale);
+        }
+      }
+      if (snap.activeScaleId && !answering) setActiveScaleId(String(snap.activeScaleId));
     }
     if (snap.resultsByScale && typeof snap.resultsByScale === 'object') {
-      setResultsByScale(snap.resultsByScale);
+      setResultsByScale((current) => ({ ...(current || {}), ...snap.resultsByScale }));
     }
-    if (snap.activeScaleId) setActiveScaleId(String(snap.activeScaleId));
     const reportIds = Array.isArray(snap.submittedReports)
       ? snap.submittedReports.map((item) => String(item?.assessmentId || '')).filter(Boolean)
       : [];
     const resultDoneIds = Object.entries(snap.resultsByScale || {})
       .filter(([, value]) => value && typeof value === 'object' && (value.publicId || value.submittedAt || value.completedAt))
       .map(([id]) => String(id));
-    const merged = Array.from(new Set([
+    const remoteDone = [
       ...(Array.isArray(snap.completedScaleIds) ? snap.completedScaleIds.map(String) : []),
       ...reportIds,
       ...resultDoneIds,
-    ]));
-    setCompletedScaleIds(merged);
-    serverUpdatedAtRef.current = snap.updatedAt || null;
+    ];
+    setCompletedScaleIds((current) => Array.from(new Set([...(current || []).map(String), ...remoteDone])));
+    // 版本号只前进：先发后到的旧回执不把它改回去，否则下一次保存会被误判为冲突
+    const nextUpdatedAt = snap.updatedAt || null;
+    if (
+      nextUpdatedAt
+      && (!serverUpdatedAtRef.current || Date.parse(nextUpdatedAt) >= Date.parse(serverUpdatedAtRef.current))
+    ) {
+      serverUpdatedAtRef.current = nextUpdatedAt;
+    }
     lastRemoteRef.current = snap;
   }, [employeeInfoFields, normalizeRestorableStep]);
 
@@ -320,14 +379,14 @@ const OnboardingAssessment = ({
         : await putEnterpriseOnboardingProgress(apiBaseUrl, slug, body, { keepalive });
       if (saved) {
         suppressServerSyncRef.current = true;
-        applyProgressSnapshot(saved);
+        applyProgressSnapshot(saved, 'ack');
         queueMicrotask(() => { suppressServerSyncRef.current = false; });
       }
       return saved;
     } catch (error) {
       if (error instanceof OnboardingProgressConflictError) {
         suppressServerSyncRef.current = true;
-        applyProgressSnapshot(error.progress);
+        applyProgressSnapshot(error.progress, 'conflict');
         setSyncNotice('其他设备已更新进度，已加载最新内容');
         queueMicrotask(() => { suppressServerSyncRef.current = false; });
         return error.progress;
@@ -338,6 +397,8 @@ const OnboardingAssessment = ({
   }, [apiBaseUrl, applyProgressSnapshot, buildProgressPutBody, mergeWithRemote, slug, syncToServer]);
   React.useEffect(() => {
     let cancelled = false;
+    // 本机暂存比云端新时，恢复后要尽快把本机作答补同步上去
+    let pushLocalDraft = false;
     setProgressReady(false);
     suppressServerSyncRef.current = true;
     remoteLoadedRef.current = false;
@@ -364,21 +425,36 @@ const OnboardingAssessment = ({
           restored = 'select';
         }
         if (restored) setStep(restored);
-      const savedAnswers = localStorage.getItem(answersKey);
-      if (savedAnswers) {
-        const parsed = JSON.parse(savedAnswers);
-        if (parsed && typeof parsed === 'object') setAnswersByScale(parsed);
-      }
+        let localAnswers = {};
+        const savedAnswers = localStorage.getItem(answersKey);
+        if (savedAnswers) {
+          const parsed = JSON.parse(savedAnswers);
+          if (parsed && typeof parsed === 'object') {
+            localAnswers = parsed;
+            setAnswersByScale(parsed);
+          }
+        }
+        let localCompleted = [];
         const savedCompleted = localStorage.getItem(completedKey);
         if (savedCompleted) {
           const parsed = JSON.parse(savedCompleted);
-          if (Array.isArray(parsed)) setCompletedScaleIds(parsed.map(String));
+          if (Array.isArray(parsed)) {
+            localCompleted = parsed.map(String);
+            setCompletedScaleIds(localCompleted);
+          }
         }
+        let localResults = {};
         const savedResults = localStorage.getItem(resultsKey);
         if (savedResults) {
           const parsed = JSON.parse(savedResults);
-          if (parsed && typeof parsed === 'object') setResultsByScale(parsed);
+          if (parsed && typeof parsed === 'object') {
+            localResults = parsed;
+            setResultsByScale(parsed);
+          }
         }
+        const localRetakes = readStoredJson(retakeKey, {});
+        setRetakeDrafts(localRetakes && typeof localRetakes === 'object' ? localRetakes : {});
+        let remoteDone = [];
         const key = slug
           ? getEnterpriseVisitorKey(slug, resolvedAccountId)
           : (() => {
@@ -406,10 +482,61 @@ const OnboardingAssessment = ({
             );
           if (!cancelled && remote) lastRemoteRef.current = remote;
           if (!cancelled && hasRemote) {
-            applyProgressSnapshot(remote);
+            // 云端快照可能比本机暂存旧（例如关页前最后几题还没来得及同步）：按本机最后作答时间
+            // 与云端 updatedAt 比较，较新的一方逐题优先，两边的作答都保留，不再整体覆盖本机
+            const localNewer = isLocalDraftNewer(readStoredJson(savedAtKey, null), remote.updatedAt);
+            const remoteAnswers = mergeAnswersByScale(remote.answersByScale, {});
+            const mergedAnswers = localNewer
+              ? mergeAnswersByScale(remoteAnswers, localAnswers)
+              : mergeAnswersByScale(localAnswers, remoteAnswers);
+            // 基本信息同理按字段合并：云端的空字段不清掉本机已填内容，较新的一方优先
+            const filled = (form) => Object.fromEntries(
+              Object.entries(form && typeof form === 'object' ? form : {})
+                .filter(([, value]) => value != null && String(value).trim() !== ''),
+            );
+            const remoteBasic = filled(remote.basicInfo);
+            const mergedBasic = localNewer
+              ? { ...remoteBasic, ...filled(localBasic) }
+              : { ...filled(localBasic), ...remoteBasic };
+            pushLocalDraft = (localNewer && !sameAnswers(mergedAnswers, remoteAnswers))
+              || !sameAnswers(mergedBasic, remoteBasic);
+            applyProgressSnapshot({ ...remote, answersByScale: mergedAnswers, basicInfo: mergedBasic }, 'restore');
             setSyncNotice('已恢复云端保存的个人信息和答题进度');
+            remoteDone = [
+              ...(remote.completedScaleIds || []).map(String),
+              ...(remote.submittedReports || []).map((item) => String(item?.assessmentId || '')).filter(Boolean),
+            ];
           } else if (!cancelled && remote?.updatedAt) {
             serverUpdatedAtRef.current = remote.updatedAt;
+          }
+        }
+
+        // 续答：上次关页 / 刷新时停在作答页，就直接回到那张量表并定位到第一道未答题
+        if (!cancelled) {
+          const resume = readStoredJson(resumeKey, null);
+          const resumeScale = resume?.scaleId
+            ? activeScales.find((scale) => String(scale?.id) === String(resume.scaleId))
+            : null;
+          const doneIds = new Set([
+            ...localCompleted,
+            ...remoteDone,
+            ...Object.entries(localResults)
+              .filter(([, value]) => value && typeof value === 'object' && (value.publicId || value.submittedAt || value.result))
+              .map(([id]) => String(id)),
+          ]);
+          const resumeRetake = Boolean(resume?.retake);
+          const resumable = resumeScale && (
+            resumeRetake
+              ? Boolean(localRetakes?.[resumeScale.id])
+              : !doneIds.has(String(resumeScale.id))
+          );
+          if (resumable) {
+            setActiveScaleId(resumeScale.id);
+            setRetakeScaleId(resumeRetake ? resumeScale.id : '');
+            setResumeInfo({ scaleId: resumeScale.id, retake: resumeRetake });
+            setStep('scale');
+          } else if (resume) {
+            writeStoredJson(resumeKey, null);
           }
         }
     } catch {
@@ -420,8 +547,9 @@ const OnboardingAssessment = ({
       } finally {
         if (!cancelled) {
           remoteLoadedRef.current = true;
-          // 刚从云端恢复后，跳过一次防抖回写，避免空本地状态冲掉云端完成态/基本信息
-          skipNextAutoSyncRef.current = true;
+          // 刚从云端恢复后，跳过一次防抖回写，避免空本地状态冲掉云端完成态/基本信息；
+          // 本机暂存比云端新时不跳过，让这部分作答尽快补同步上去
+          skipNextAutoSyncRef.current = !pushLocalDraft;
           suppressServerSyncRef.current = false;
           setProgressReady(true);
         }
@@ -429,6 +557,7 @@ const OnboardingAssessment = ({
     })();
     return () => { cancelled = true; };
   }, [
+    activeScales,
     answersKey,
     apiBaseUrl,
     applyProgressSnapshot,
@@ -439,6 +568,9 @@ const OnboardingAssessment = ({
     progressKey,
     resolvedAccountId,
     resultsKey,
+    resumeKey,
+    retakeKey,
+    savedAtKey,
     slug,
     syncToServer,
     visitorKeyStorage,
@@ -476,6 +608,27 @@ const OnboardingAssessment = ({
     try { localStorage.setItem(resultsKey, JSON.stringify(resultsByScale)); } catch {}
   }, [resultsKey, resultsByScale, progressReady]);
 
+  React.useEffect(() => {
+    if (!progressReady) return;
+    writeStoredJson(retakeKey, Object.keys(retakeDrafts || {}).length ? retakeDrafts : null);
+  }, [progressReady, retakeDrafts, retakeKey]);
+
+  // 续答位置：停在作答页时记下量表（关页 / 刷新后直接回到这里）；通过“返回”“暂存”“提交”离开作答页就清除
+  React.useEffect(() => {
+    if (!progressReady) return;
+    if (step === 'scale' && activeScaleId) {
+      writeStoredJson(resumeKey, { scaleId: activeScaleId, retake: retakeMode, savedAt: new Date().toISOString() });
+    } else {
+      writeStoredJson(resumeKey, null);
+    }
+  }, [activeScaleId, progressReady, resumeKey, retakeMode, step]);
+
+  React.useEffect(() => {
+    if (!draftNotice) return undefined;
+    const timer = window.setTimeout(() => setDraftNotice(''), 6000);
+    return () => window.clearTimeout(timer);
+  }, [draftNotice]);
+
   // 登录账号：作答等变更防抖同步到服务端（跨设备续答）
   React.useEffect(() => {
     if (!progressReady || !syncToServer || suppressServerSyncRef.current) return;
@@ -498,8 +651,9 @@ const OnboardingAssessment = ({
     syncToServer,
   ]);
 
+  // 关页 / 切到后台时立即补一次同步（之前这里多了一行 `if (!syncNotice) return`，
+  // 导致只有提示条显示的那几秒才注册监听，平时关页前的最后几题不会同步）
   React.useEffect(() => {
-    if (!syncNotice) return;
     if (!syncToServer) return undefined;
     const flushNow = () => {
       void flushProgressToServer({}, { keepalive: true });
@@ -545,13 +699,49 @@ const OnboardingAssessment = ({
         [scaleId]: nextForScale,
       };
     });
+    // 记录本机最后作答时间：恢复时据此判断本机暂存与云端进度谁更新
+    writeStoredJson(savedAtKey, new Date().toISOString());
+  }, [savedAtKey]);
+
+  /** 用户在基本信息页的输入：同样记录本机最后修改时间，供与云端进度合并时判断谁更新 */
+  const setBasicFormFromUser = React.useCallback((next) => {
+    setBasicForm(next);
+    writeStoredJson(savedAtKey, new Date().toISOString());
+  }, [savedAtKey]);
+
+  /** 重新作答的答案只写进本机重答草稿，原答案与原结果在提交成功前保持不变 */
+  const setRetakeAnswer = React.useCallback((scaleId, questionKey, value) => {
+    setRetakeDrafts((current) => {
+      const now = new Date().toISOString();
+      const draft = current[scaleId] || { attemptId: createSubmissionId(), answers: {}, startedAt: now, savedAt: now };
+      const answers = { ...(draft.answers || {}) };
+      if (value === undefined) {
+        delete answers[questionKey];
+      } else {
+        answers[questionKey] = value;
+      }
+      return { ...current, [scaleId]: { ...draft, answers, savedAt: now } };
+    });
   }, []);
 
   const openScale = React.useCallback((scaleId) => {
+    const id = String(scaleId);
+    // 已完成的量表 = 重新作答：空白开始，用单独的本机草稿；之前暂存过的重答则接着答
+    const isRetake = completedIdsForUi.includes(id);
+    if (isRetake) {
+      setRetakeDrafts((current) => {
+        if (current[id]) return current;
+        const now = new Date().toISOString();
+        return { ...current, [id]: { attemptId: createSubmissionId(), answers: {}, startedAt: now, savedAt: now } };
+      });
+    }
+    setRetakeScaleId(isRetake ? id : '');
+    // 有暂存进度时提示并定位到第一道未答题
+    setResumeInfo(draftStatusByScale[id]?.answered > 0 ? { scaleId: id, retake: isRetake } : null);
     setActiveScaleId(scaleId);
-      setSubmitError('');
+    setSubmitError('');
     goto('scale');
-  }, []);
+  }, [completedIdsForUi, draftStatusByScale]);
 
   const openScaleResult = React.useCallback((scaleId) => {
     setActiveScaleId(scaleId);
@@ -573,7 +763,10 @@ const OnboardingAssessment = ({
   }, [activeScaleId, activeScales]);
 
   const buildAnswersForScale = React.useCallback((scale) => {
-          const raw = answersByScale[scale.id] || {};
+          // 重新作答时提交重答草稿里的答案，而不是上一次的答案
+          const raw = (retakeScaleId && retakeScaleId === scale.id
+            ? retakeDrafts[scale.id]?.answers
+            : answersByScale[scale.id]) || {};
           const answers = {};
           (scale.items || []).forEach((item, index) => {
             const questionId = item?.id || String(index);
@@ -590,7 +783,51 @@ const OnboardingAssessment = ({
             }
           });
     return answers;
-  }, [answersByScale]);
+  }, [answersByScale, retakeDrafts, retakeScaleId]);
+
+  /** 结束一轮重答：丢掉重答草稿与这一轮的待提交编号 */
+  const clearRetakeDraft = React.useCallback((scaleId) => {
+    const id = String(scaleId || '');
+    if (!id) return;
+    setRetakeDrafts((current) => {
+      if (!current[id]) return current;
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+    const pending = { ...(readStoredJson(pendingKey, {}) || {}) };
+    if (pending[id]) {
+      delete pending[id];
+      writeStoredJson(pendingKey, Object.keys(pending).length ? pending : null);
+    }
+  }, [pendingKey]);
+
+  /** 暂存并返回量表选择：作答随点随存在本机，这里给出明确提示，并尽快同步一次云端 */
+  const saveDraftAndExit = React.useCallback(() => {
+    if (activeScale) {
+      const answers = retakeMode
+        ? retakeDrafts[activeScale.id]?.answers
+        : answersByScale[activeScale.id];
+      const { answered, total } = countAnsweredItems(activeScale, answers);
+      if (answered > 0) {
+        setDraftNotice(`已暂存「${activeScale.name}」的${retakeMode ? '重新作答' : '作答'}进度（已答 ${answered} / ${total} 题），下次打开可接着答。`);
+      }
+    }
+    setSubmitError('');
+    setResumeInfo(null);
+    goto('select');
+    // 重答草稿只存本机；首次作答的进度在登录账号下同步云端，换设备也能接着答
+    if (syncToServer && !retakeMode) void flushProgressToServer({ step: 'select' }, { retry: true });
+  }, [activeScale, answersByScale, flushProgressToServer, retakeDrafts, retakeMode, syncToServer]);
+
+  const discardRetake = React.useCallback(() => {
+    clearRetakeDraft(activeScaleId);
+    setRetakeScaleId('');
+    setResumeInfo(null);
+    setSubmitError('');
+    setDraftNotice('已放弃本次重新作答，原结果保持不变。');
+    goto('select');
+  }, [activeScaleId, clearRetakeDraft]);
 
   const markScaleCompleted = React.useCallback((scaleId, reportPayload) => {
     setCompletedScaleIds((prev) => (prev.includes(scaleId) ? prev : [...prev, scaleId]));
@@ -601,8 +838,9 @@ const OnboardingAssessment = ({
 
   /** 当前量表提交成功后：还有未完成则进入下一张，全部完成才进结果页 */
   const advanceAfterScaleSubmit = React.useCallback((scaleId) => {
-    const doneAfter = new Set(completedScaleIds);
-    doneAfter.add(scaleId);
+    // 与选择页一致：结果里已有报告的量表也算完成，避免把已完成的量表当成“下一张”
+    const doneAfter = new Set(completedIdsForUi.map(String));
+    doneAfter.add(String(scaleId));
     const currentIdx = activeScales.findIndex((s) => s?.id === scaleId);
     let next = null;
     for (let i = currentIdx + 1; i < activeScales.length; i += 1) {
@@ -619,19 +857,23 @@ const OnboardingAssessment = ({
         }
       }
     }
+    setRetakeScaleId('');
     if (next?.id) {
       setActiveScaleId(next.id);
       setSubmitError('');
+      setResumeInfo(draftStatusByScale[String(next.id)]?.answered > 0 ? { scaleId: next.id, retake: false } : null);
       goto('scale');
       return;
     }
+    setResumeInfo(null);
     setActiveScaleId(scaleId);
     goto('scaleResult');
-  }, [activeScales, completedScaleIds]);
+  }, [activeScales, completedIdsForUi, draftStatusByScale]);
 
   const handleSingleScaleSubmit = React.useCallback(async () => {
     if (!activeScale?.id || submittingRef.current) return;
     const scale = activeScale;
+    const isRetake = retakeScaleId === scale.id;
     const answers = buildAnswersForScale(scale);
     if (scale.scale === 'dynamic') {
       const missingRequired = (scale.items || []).find((item, index) => {
@@ -669,6 +911,7 @@ const OnboardingAssessment = ({
         };
         setSubmitError('');
         markScaleCompleted(scale.id, mock);
+        if (isRetake) clearRetakeDraft(scale.id);
         const nextCompleted = completedScaleIds.includes(scale.id)
           ? completedScaleIds
           : [...completedScaleIds, scale.id];
@@ -682,16 +925,30 @@ const OnboardingAssessment = ({
         return;
       }
 
+      // 提交编号：同一轮作答、同一份答案重试时沿用上次的编号，后端按编号去重；
+      // 避免“服务器其实已保存、前端却超时报错”后再点提交，多出一份报告
+      const pendingMap = readStoredJson(pendingKey, {}) || {};
+      const pending = resolveSubmissionId(
+        pendingMap[scale.id],
+        submissionSignature(answers, isRetake ? retakeDrafts[scale.id]?.attemptId : null),
+        createSubmissionId,
+      );
+      writeStoredJson(pendingKey, { ...pendingMap, [scale.id]: pending });
+
       const response = await submitEnterpriseOnboardingReports(apiBaseUrl, slug, {
         visitorKey: visitorKey || createVisitorKey(),
         employeeInfo: basicForm,
         reports: [{
-          clientSubmissionId: createSubmissionId(),
+          clientSubmissionId: pending.id,
           assessmentId: scale.id,
           assessmentVersion: Number(scale.version) > 0 ? Number(scale.version) : 1,
           answers,
         }],
       });
+      const latestPending = { ...(readStoredJson(pendingKey, {}) || {}) };
+      delete latestPending[scale.id];
+      writeStoredJson(pendingKey, Object.keys(latestPending).length ? latestPending : null);
+      if (isRetake) clearRetakeDraft(scale.id);
       const saved = Array.isArray(response?.reports) ? response.reports[0] : null;
       const submittedAt = new Date().toISOString();
       const reportPayload = {
@@ -735,13 +992,66 @@ const OnboardingAssessment = ({
     apiBaseUrl,
     basicForm,
     buildAnswersForScale,
+    clearRetakeDraft,
     completedScaleIds,
     flushProgressToServer,
     markScaleCompleted,
+    pendingKey,
     resultsByScale,
+    retakeDrafts,
+    retakeScaleId,
     slug,
     visitorKey,
   ]);
+
+  /** 下载完整报告：把已出结果的量表（全部完成时为全部，否则为当前这张）生成一份 PDF */
+  const [downloadState, setDownloadState] = React.useState({ busy: false, message: '', error: false });
+  const handleDownloadReport = React.useCallback(async () => {
+    if (downloadState.busy) return;
+    if (isWeChatBrowser()) {
+      setDownloadState({
+        busy: false,
+        error: true,
+        message: '微信内置浏览器不支持直接下载文件：请点右上角「···」，选择「在浏览器打开」后再点“下载完整报告”。',
+      });
+      return;
+    }
+    const scalesForPdf = (allDone ? activeScales : (activeScale ? [activeScale] : []))
+      .filter((scale) => {
+        const report = resultsByScale[scale?.id];
+        return report && typeof report === 'object' && (report.result || report.resultSummary);
+      });
+    if (!scalesForPdf.length) {
+      setDownloadState({ busy: false, error: true, message: '暂无可下载的测评结果。' });
+      return;
+    }
+    setDownloadState({ busy: true, error: false, message: '' });
+    try {
+      await downloadOnboardingReportPdf({
+        siteName,
+        companyName,
+        sections: scalesForPdf.map((scale) => {
+          const report = resultsByScale[scale.id] || {};
+          return {
+            title: report.assessmentTitle || scale.name || '测评量表',
+            subtitle: report.assessmentSubtitle || scale.subtitle || '',
+            publicId: report.publicId,
+            structure: scale.report || null,
+            result: report.result && typeof report.result === 'object' ? report.result : null,
+            resultSummary: report.resultSummary || '',
+            disclaimer: scale.disclaimer || '',
+          };
+        }),
+      });
+      setDownloadState({ busy: false, error: false, message: `报告已生成（共 ${scalesForPdf.length} 个量表），请在浏览器的下载列表中查看。` });
+    } catch (error) {
+      setDownloadState({
+        busy: false,
+        error: true,
+        message: error instanceof Error && error.message ? `报告生成失败：${error.message}` : '报告生成失败，请稍后重试',
+      });
+    }
+  }, [activeScale, activeScales, allDone, companyName, downloadState.busy, resultsByScale, siteName]);
 
   const showStepper = step === 'basic' || step === 'select' || step === 'scale' || step === 'scaleResult';
 
@@ -776,6 +1086,30 @@ const OnboardingAssessment = ({
         </div>
       ) : null}
 
+      {draftNotice && step === 'select' ? (
+        <div
+          role="status"
+          className="gxa-onb-notice"
+          style={{
+            maxWidth: 1120,
+            margin: '12px auto 0',
+            padding: '10px 16px',
+            background: '#EEF7F2',
+            border: '1px solid #BFE3D0',
+            color: '#1F6B4A',
+            fontSize: 13,
+            lineHeight: 1.7,
+            borderRadius: 6,
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 8,
+          }}
+        >
+          <Icon name="check" size={14} color="#1F6B4A"/>
+          <span style={{ minWidth: 0 }}>{draftNotice}</span>
+        </div>
+      ) : null}
+
       <main className="gxa-onb-main" style={{ maxWidth: 1120, margin: '0 auto', padding: '40px 40px 120px' }}>
         {step === 'welcome' && (
           <StepWelcome
@@ -795,7 +1129,7 @@ const OnboardingAssessment = ({
             visibleFields={employeeInfoFields}
             customFields={customEmployeeInfoFields}
             form={basicForm}
-            setForm={setBasicForm}
+            setForm={setBasicFormFromUser}
             onNext={() => {
               goto('select');
               // 首次填完立刻落库，换设备可跳过基本信息
@@ -810,6 +1144,7 @@ const OnboardingAssessment = ({
             completedScaleIds={completedIdsForUi}
             allDone={allDone}
             inProgressScaleIds={inProgressScaleIds}
+            draftStatus={draftStatusByScale}
             primary={primary}
             primaryDark={primaryDark}
             homeHref={homeHref}
@@ -820,16 +1155,22 @@ const OnboardingAssessment = ({
         )}
         {step === 'scale' && activeScale && (
           <StepScale
+            key={`${activeScale.id}-${retakeMode ? 'retake' : 'first'}`}
             scale={activeScale}
             primary={primary}
             primaryDark={primaryDark}
-            answersByScale={answersByScale}
-            setScaleAnswer={setScaleAnswer}
+            answersByScale={retakeMode
+              ? { [activeScale.id]: retakeDrafts[activeScale.id]?.answers || {} }
+              : answersByScale}
+            setScaleAnswer={retakeMode ? setRetakeAnswer : setScaleAnswer}
             submitting={submitting}
             submitError={submitError}
             nextLabel={scaleSubmitLabel}
+            retake={retakeMode}
+            resumed={Boolean(resumeInfo && resumeInfo.scaleId === activeScale.id)}
+            onDiscardRetake={discardRetake}
             onSubmit={handleSingleScaleSubmit}
-            onBack={() => { setSubmitError(''); goto('select'); }}
+            onBack={saveDraftAndExit}
           />
         )}
         {step === 'scaleResult' && (
@@ -851,6 +1192,9 @@ const OnboardingAssessment = ({
             resultPageTotal={allDone ? resultPageTotal : 1}
             onPrevResult={allDone && resultPageTotal > 1 ? () => goToResultPage('prev') : undefined}
             onNextResult={allDone && resultPageTotal > 1 ? () => goToResultPage('next') : undefined}
+            onDownload={handleDownloadReport}
+            downloadState={downloadState}
+            downloadScope={allDone && resultPageTotal > 1 ? 'all' : 'single'}
             onBack={() => { setSubmitError(''); goto('select'); }}
           />
         )}
@@ -1449,6 +1793,7 @@ const StepScaleSelect = ({
   completedScaleIds,
   allDone,
   inProgressScaleIds,
+  draftStatus = {},
   primary,
   primaryDark,
   homeHref,
@@ -1493,6 +1838,8 @@ const StepScaleSelect = ({
         {(scales || []).map((scale, index) => {
           const done = doneSet.has(scale.id);
           const inProgress = !done && progressSet.has(scale.id);
+          const draft = draftStatus[scale.id] || null;
+          const retaking = done && Boolean(draft?.retake);
           return (
             <div
               key={scale.id || index}
@@ -1534,6 +1881,14 @@ const StepScaleSelect = ({
                       {done ? '已完成' : '作答中'}
                     </span>
                   ) : null}
+                  {retaking ? (
+                    <span style={{
+                      fontSize: 11, fontWeight: 600, color: '#8F6510',
+                      background: '#E0A5281C', padding: '3px 8px', borderRadius: 999,
+                    }}>
+                      重新作答中
+                    </span>
+                  ) : null}
                 </div>
                 {scale.subtitle ? (
                   <div style={{ marginTop: 8, marginLeft: 38, fontSize: 13, color: '#4A5A78', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
@@ -1543,9 +1898,14 @@ const StepScaleSelect = ({
                 <div style={{ marginTop: 10, marginLeft: 38, display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 12, color: '#8B96A8' }}>
                   <span>共 {scale.total || scale.items?.length || 0} 题</span>
                   {scale.dur ? <span>约 {scale.dur}</span> : null}
+                  {draft && draft.answered > 0 ? (
+                    <span style={{ color: retaking ? '#8F6510' : primary, fontWeight: 600 }}>
+                      {retaking ? '重答' : ''}已暂存 {draft.answered} / {draft.total} 题
+                    </span>
+                  ) : null}
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
+              <div className="gxa-scale-select-actions" style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
                 {allDone && done ? (
                   <button
                     type="button"
@@ -1567,7 +1927,7 @@ const StepScaleSelect = ({
                     padding: '11px 18px', borderRadius: 4, fontSize: 14, fontWeight: 600, cursor: 'pointer',
                   }}
                 >
-                  {done ? '重新作答' : inProgress ? '继续作答' : '开始作答'}
+                  {retaking ? '继续重答' : done ? '重新作答' : inProgress ? '继续作答' : '开始作答'}
                 </button>
               </div>
             </div>
@@ -1600,11 +1960,39 @@ const StepScale = ({
   submitting,
   submitError,
   nextLabel = '提交作答结果 →',
+  retake = false,
+  resumed = false,
+  onDiscardRetake,
   onSubmit,
   onBack,
 }) => {
   const scaleId = scale?.id || 'scale';
   const answers = answersByScale[scaleId] || {};
+  // 打开时的续答定位：记下当时第一道未答题，滚过去并提示（只在打开时算一次）
+  const [resumeTarget] = React.useState(() => (resumed ? firstUnansweredIndex(scale, answers) : -1));
+  React.useEffect(() => {
+    if (resumeTarget < 0) return undefined;
+    // 直接跳到第一道未答题；站点全局开了 `html { scroll-behavior: smooth }`，平滑滚动在页面刚就绪或
+    // 后台标签页里容易被打断，这里临时关掉平滑效果再跳；若随后又被重置回顶部，再补跳一次
+    const jump = () => {
+      const el = document.querySelector(`[data-onb-question="${resumeTarget}"]`);
+      if (!el) return;
+      const root = document.documentElement;
+      const previous = root.style.scrollBehavior;
+      root.style.scrollBehavior = 'auto';
+      const rect = el.getBoundingClientRect();
+      window.scrollTo(0, Math.max(0, window.scrollY + rect.top - Math.max(80, (window.innerHeight - rect.height) / 2)));
+      root.style.scrollBehavior = previous;
+    };
+    const first = window.setTimeout(jump, 250);
+    const second = window.setTimeout(() => {
+      if (window.scrollY < 40) jump();
+    }, 900);
+    return () => {
+      window.clearTimeout(first);
+      window.clearTimeout(second);
+    };
+  }, [resumeTarget]);
   const answerKey = (item, i) => (scale?.scale === 'dynamic' && item?.id != null ? item.id : i);
   const isItemAnswered = (item, i) => {
     const key = answerKey(item, i);
@@ -1647,6 +2035,30 @@ const StepScale = ({
       />
 
       <div className="gxa-scale-card" style={{ background: '#fff', borderRadius: 8, padding: 40, marginTop: 32, boxShadow: '0 2px 20px rgba(15,46,95,.04)' }}>
+        {retake ? (
+          <div className="gxa-scale-banner" style={{ marginBottom: 16, padding: '12px 16px', background: '#FFF8E8', border: '1px solid #EBD7A6', borderRadius: 6, color: '#6B5420', fontSize: 13, lineHeight: 1.7, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            <span style={{ minWidth: 0, flex: '1 1 260px' }}>
+              你正在<strong>重新作答</strong>本量表：提交后会生成一份新的报告，原报告仍会保留；提交前原结果保持不变，重答进度会暂存在本机。
+            </span>
+            {typeof onDiscardRetake === 'function' ? (
+              <button
+                type="button"
+                onClick={onDiscardRetake}
+                style={{ background: 'transparent', border: '1px solid #D9C28A', color: '#6B5420', padding: '4px 12px', borderRadius: 4, fontSize: 12, cursor: 'pointer', flexShrink: 0 }}
+              >
+                放弃重答
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        {resumeTarget >= 0 ? (
+          <div role="status" className="gxa-scale-banner" style={{ marginBottom: 16, padding: '12px 16px', background: '#EEF7F2', border: '1px solid #BFE3D0', borderRadius: 6, color: '#1F6B4A', fontSize: 13, lineHeight: 1.7, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+            <Icon name="check" size={14} color="#1F6B4A"/>
+            <span style={{ minWidth: 0 }}>
+              已恢复你暂存的作答进度（已答 {answered} / {demoTotal} 题），已为你定位到第 {resumeTarget + 1} 题，接着答就好。
+            </span>
+          </div>
+        ) : null}
         <div className="gxa-scale-prompt" style={{ fontSize: 15, color: '#0F2E5F', fontWeight: 600, marginBottom: 24, padding: '14px 18px', background: `${primary}08`, borderLeft: `3px solid ${primary}`, borderRadius: 4, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
           {scale.question}
         </div>
@@ -1666,7 +2078,7 @@ const StepScale = ({
             const followUpVal = onboardingFollowUpValue(selected);
             const optionCount = Math.min((item.options || []).length || 1, 5);
             return (
-            <div key={item?.id || i} style={{ padding: '20px 16px 24px', background: '#FBFAF7', borderRadius: 6 }}>
+            <div key={item?.id || i} data-onb-question={i} style={{ padding: '20px 16px 24px', background: '#FBFAF7', borderRadius: 6, scrollMarginTop: 96 }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 16 }}>
                 <div style={{ width: 26, height: 26, borderRadius: '50%', background: primary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
                   {i + 1}
@@ -1877,7 +2289,7 @@ const StepScale = ({
 
         <div style={{ marginTop: 24, padding: '12px 16px', background: `${primary}08`, borderRadius: 4, fontSize: 12, color: '#4A5A78', display: 'flex', alignItems: 'center', gap: 8 }}>
           <Icon name="check" size={14} color={primary}/>
-          进度自动保存 · 已答 {answered} / {demoTotal} 题
+          每道题作答后自动暂存在本机 · 已答 {answered} / {demoTotal} 题
         </div>
         {submitError ? (
           <div style={{ marginTop: 12, padding: '12px 16px', background: '#FFF6F4', border: '1px solid #F3C6C2', borderRadius: 4, color: '#8A2F2A', fontSize: 13, lineHeight: 1.6 }}>
@@ -1891,7 +2303,7 @@ const StepScale = ({
         onNext={onSubmit}
         nextDisabled={!isComplete || submitting}
         primary={primary}
-        backLabel="返回量表选择"
+        backLabel="暂存并返回"
         nextLabel={submitting ? '提交中…' : nextLabel}
       />
     </div>
@@ -2523,6 +2935,9 @@ const StepReport = ({
   resultPageTotal = 1,
   onPrevResult,
   onNextResult,
+  onDownload,
+  downloadState = { busy: false, message: '', error: false },
+  downloadScope = 'single',
   onBack,
 }) => {
   const result = report?.result && typeof report.result === 'object' ? report.result : null;
@@ -2782,10 +3197,7 @@ const StepReport = ({
                 <Icon name={s.icon} size={22}/>
               </div>
               <h4 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: '#0F2E5F', fontFamily: SERIF, wordBreak: 'break-word' }}>{s.title}</h4>
-              <p style={{ fontSize: 13, color: '#4A5A78', lineHeight: 1.8, marginTop: 8, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{s.desc}</p>
-              <a href="#" style={{ marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: primary, fontWeight: 500, textDecoration: 'none' }}>
-                {s.action} <Icon name="arrow" size={12}/>
-              </a>
+              <p style={{ fontSize: 13, color: '#4A5A78', lineHeight: 1.8, marginTop: 8, marginBottom: 0, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{s.desc}</p>
             </div>
           ))}
         </div>
@@ -2840,16 +3252,35 @@ const StepReport = ({
             ← 返回量表选择
           </button>
         ) : null}
-        <button style={{ background: '#fff', color: '#0F2E5F', border: '1px solid #E0E4EC', padding: '12px 22px', borderRadius: 4, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxSizing: 'border-box' }}>
-          <Icon name="edit" size={14}/> 下载完整报告 PDF
-        </button>
-        <button style={{ background: '#fff', color: '#0F2E5F', border: '1px solid #E0E4EC', padding: '12px 22px', borderRadius: 4, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxSizing: 'border-box' }}>
-          <Icon name="chat" size={14}/> 就报告结果咨询
-        </button>
+        {typeof onDownload === 'function' ? (
+          <button
+            type="button"
+            onClick={onDownload}
+            disabled={downloadState.busy}
+            title={downloadScope === 'all' ? '把全部量表的结果合成一份 PDF 下载' : '下载本量表结果 PDF'}
+            style={{ background: primary, color: '#fff', border: `1px solid ${primary}`, padding: '12px 22px', borderRadius: 4, fontSize: 14, fontWeight: 600, cursor: downloadState.busy ? 'wait' : 'pointer', opacity: downloadState.busy ? 0.7 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxSizing: 'border-box', boxShadow: `0 10px 22px -12px ${primary}` }}
+          >
+            <Icon name="edit" size={14}/> {downloadState.busy ? '正在生成报告…' : '下载完整报告 PDF'}
+          </button>
+        ) : null}
         <a href={homeHref} style={{ background: '#fff', color: '#0F2E5F', border: '1px solid #E0E4EC', padding: '12px 22px', borderRadius: 4, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, textDecoration: 'none', boxSizing: 'border-box' }}>
           返回{siteName}首页 <Icon name="arrow" size={14}/>
         </a>
       </div>
+      {downloadState.message ? (
+        <div
+          role={downloadState.error ? 'alert' : 'status'}
+          style={{
+            marginTop: 14, padding: '10px 16px', borderRadius: 6, fontSize: 13, lineHeight: 1.7, textAlign: 'center',
+            background: downloadState.error ? '#FFF6F4' : '#EEF7F2',
+            border: `1px solid ${downloadState.error ? '#F3C6C2' : '#BFE3D0'}`,
+            color: downloadState.error ? '#8A2F2A' : '#1F6B4A',
+            wordBreak: 'break-word',
+          }}
+        >
+          {downloadState.message}
+        </div>
+      ) : null}
 
       <div className="gxa-report-about" style={{ marginTop: 32, padding: '20px 24px', background: '#FBFAF7', borderRadius: 6, borderLeft: `3px solid ${primary}`, fontSize: 13, color: '#4A5A78', lineHeight: 1.8, wordBreak: 'break-word', overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}>
         <strong style={{ color: '#0F2E5F' }}>关于本报告 · </strong>
