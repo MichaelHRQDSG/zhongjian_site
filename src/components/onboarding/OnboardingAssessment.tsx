@@ -1157,7 +1157,7 @@ const StepScaleSelect = ({
                   ) : null}
                 </div>
                 {scale.subtitle ? (
-                  <div style={{ marginTop: 8, marginLeft: 38, fontSize: 13, color: '#4A5A78', lineHeight: 1.6 }}>
+                  <div style={{ marginTop: 8, marginLeft: 38, fontSize: 13, color: '#4A5A78', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
                     {scale.subtitle}
                   </div>
                 ) : null}
@@ -1268,7 +1268,7 @@ const StepScale = ({
       />
 
       <div className="gxa-scale-card" style={{ background: '#fff', borderRadius: 8, padding: 40, marginTop: 32, boxShadow: '0 2px 20px rgba(15,46,95,.04)' }}>
-        <div className="gxa-scale-prompt" style={{ fontSize: 15, color: '#0F2E5F', fontWeight: 600, marginBottom: 24, padding: '14px 18px', background: `${primary}08`, borderLeft: `3px solid ${primary}`, borderRadius: 4, lineHeight: 1.7 }}>
+        <div className="gxa-scale-prompt" style={{ fontSize: 15, color: '#0F2E5F', fontWeight: 600, marginBottom: 24, padding: '14px 18px', background: `${primary}08`, borderLeft: `3px solid ${primary}`, borderRadius: 4, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
           {scale.question}
         </div>
 
@@ -1624,7 +1624,7 @@ const StepScaleResult = ({ scale, report, primary, primaryDark, accent, onBack }
 
       <div style={{ background: '#fff', borderRadius: 8, padding: 32, marginTop: 20, boxShadow: '0 2px 20px rgba(15,46,95,.04)' }}>
         {scale?.reportIntro ? (
-          <div style={{ marginBottom: 20, padding: '14px 16px', background: `${primary}08`, borderRadius: 6, fontSize: 13, color: '#4A5A78', lineHeight: 1.75 }}>
+          <div style={{ marginBottom: 20, padding: '14px 16px', background: `${primary}08`, borderRadius: 6, fontSize: 13, color: '#4A5A78', lineHeight: 1.75, whiteSpace: 'pre-wrap' }}>
             {scale.reportIntro}
           </div>
         ) : null}
@@ -1635,7 +1635,7 @@ const StepScaleResult = ({ scale, report, primary, primaryDark, accent, onBack }
         ) : null}
         {renderScaleResultBody(result, primary, accent)}
         {scale?.disclaimer ? (
-          <p style={{ margin: '24px 0 0', fontSize: 12, color: '#8B96A8', lineHeight: 1.7 }}>{scale.disclaimer}</p>
+          <p style={{ margin: '24px 0 0', fontSize: 12, color: '#8B96A8', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{scale.disclaimer}</p>
         ) : (
           <p style={{ margin: '24px 0 0', fontSize: 12, color: '#8B96A8', lineHeight: 1.7 }}>
             本结果仅供参考，不作为临床诊断依据。
@@ -2476,7 +2476,7 @@ const StepReport = ({
         </a>
       </div>
 
-      <div className="gxa-report-about" style={{ marginTop: 32, padding: '20px 24px', background: '#FBFAF7', borderRadius: 6, borderLeft: `3px solid ${primary}`, fontSize: 13, color: '#4A5A78', lineHeight: 1.8, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+      <div className="gxa-report-about" style={{ marginTop: 32, padding: '20px 24px', background: '#FBFAF7', borderRadius: 6, borderLeft: `3px solid ${primary}`, fontSize: 13, color: '#4A5A78', lineHeight: 1.8, wordBreak: 'break-word', overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}>
         <strong style={{ color: '#0F2E5F' }}>关于本报告 · </strong>
         {scale?.disclaimer || '本结果仅供参考，不作为临床诊断依据。分数与解读根据本次真实作答计算。'}
       </div>
@@ -2554,7 +2554,7 @@ const StepIntro = ({ eyebrow, title, desc, meta, primary }) => (
     <div className="gxa-step-intro-eyebrow" style={{ fontSize: 12, color: primary, letterSpacing: 1, marginBottom: 12, fontWeight: 500, wordBreak: 'break-word' }}>{eyebrow.toUpperCase()}</div>
     <h1 className="gxa-step-intro-title" style={{ fontFamily: '"Noto Serif SC", serif', fontSize: 34, fontWeight: 700, margin: 0, color: '#0F2E5F', letterSpacing: 2, lineHeight: 1.3, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{title}</h1>
     {desc ? (
-      <p className="gxa-step-intro-desc" style={{ fontSize: 14, color: '#4A5A78', marginTop: 12, lineHeight: 1.8, wordBreak: 'break-word' }}>{desc}</p>
+      <p className="gxa-step-intro-desc" style={{ fontSize: 14, color: '#4A5A78', marginTop: 12, lineHeight: 1.8, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{desc}</p>
     ) : null}
     {Array.isArray(meta) && meta.length > 0 ? (
       <div className="gxa-step-intro-meta" style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '6px 14px', marginTop: desc ? 8 : 12, fontSize: 13, color: '#4A5A78', lineHeight: 1.6 }}>
