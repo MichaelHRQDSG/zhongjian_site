@@ -192,12 +192,21 @@ export function EnterpriseProfileDialog({
           progress?.basicInfo && typeof progress.basicInfo === 'object'
             ? (progress.basicInfo as Record<string, unknown>)
             : {};
-        setForm({ ...EMPTY_EMPLOYEE_INFO_FORM, ...Object.fromEntries(
-          Object.entries(basic).map(([k, v]) => [k, v == null ? '' : String(v)]),
-        ) });
+        const nextForm = {
+          ...EMPTY_EMPLOYEE_INFO_FORM,
+          ...Object.fromEntries(
+            Object.entries(basic).map(([k, v]) => [k, v == null ? '' : String(v)]),
+          ),
+        };
+        setForm(nextForm);
         setProgressBase(progress);
-        if (Object.values(basic).some((value) => String(value || '').trim())) {
+        const hasBasic = Object.values(nextForm).some((value) => String(value || '').trim());
+        if (hasBasic) {
           setNotice('已载入云端保存的个人信息');
+        } else if (progress?.exists) {
+          setNotice('云端暂无基本信息，请填写后保存，之后换设备可自动带入');
+        } else {
+          setNotice('尚未同步过个人信息，请填写并保存');
         }
       } catch {
         if (!cancelled) setError('加载个人信息失败，请稍后重试');

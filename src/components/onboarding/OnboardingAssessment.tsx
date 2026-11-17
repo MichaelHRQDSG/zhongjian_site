@@ -141,6 +141,7 @@ const OnboardingAssessment = ({
   const submittingRef = React.useRef(false);
   const serverUpdatedAtRef = React.useRef(null);
   const suppressServerSyncRef = React.useRef(true);
+  const skipNextAutoSyncRef = React.useRef(false);
   const lastRemoteRef = React.useRef<OnboardingProgressSnapshot | null>(null);
   const remoteLoadedRef = React.useRef(false);
   const stepRef = React.useRef(step);
@@ -187,10 +188,10 @@ const OnboardingAssessment = ({
   /** 提交当前量表后，是否还有未完成的量表（用于按钮文案与跳转） */
   const hasMoreScalesAfterSubmit = React.useMemo(() => {
     if (!activeScaleId || activeScales.length <= 1) return false;
-    const doneAfter = new Set(completedScaleIds);
+    const doneAfter = new Set(completedIdsForUi);
     doneAfter.add(activeScaleId);
     return activeScales.some((s) => s?.id && !doneAfter.has(s.id));
-  }, [activeScaleId, activeScales, completedScaleIds]);
+  }, [activeScaleId, activeScales, completedIdsForUi]);
   const scaleSubmitLabel = hasMoreScalesAfterSubmit ? '继续作答 →' : '提交作答结果 →';
 
   const normalizeRestorableStep = React.useCallback((raw) => {
@@ -232,13 +233,15 @@ const OnboardingAssessment = ({
     const reportIds = Array.isArray(snap.submittedReports)
       ? snap.submittedReports.map((item) => String(item?.assessmentId || '')).filter(Boolean)
       : [];
-    if (reportIds.length || Array.isArray(snap.completedScaleIds)) {
-      const merged = Array.from(new Set([
-        ...(Array.isArray(snap.completedScaleIds) ? snap.completedScaleIds.map(String) : []),
-        ...reportIds,
-      ]));
-      setCompletedScaleIds(merged);
-    }
+    const resultDoneIds = Object.entries(snap.resultsByScale || {})
+      .filter(([, value]) => value && typeof value === 'object' && (value.publicId || value.submittedAt || value.completedAt))
+      .map(([id]) => String(id));
+    const merged = Array.from(new Set([
+      ...(Array.isArray(snap.completedScaleIds) ? snap.completedScaleIds.map(String) : []),
+      ...reportIds,
+      ...resultDoneIds,
+    ]));
+    setCompletedScaleIds(merged);
     serverUpdatedAtRef.current = snap.updatedAt || null;
     lastRemoteRef.current = snap;
   }, [employeeInfoFields, normalizeRestorableStep]);
@@ -417,6 +420,8 @@ const OnboardingAssessment = ({
       } finally {
         if (!cancelled) {
           remoteLoadedRef.current = true;
+          // 刚从云端恢复后，跳过一次防抖回写，避免空本地状态冲掉云端完成态/基本信息
+          skipNextAutoSyncRef.current = true;
           suppressServerSyncRef.current = false;
           setProgressReady(true);
         }
@@ -474,6 +479,10 @@ const OnboardingAssessment = ({
   // 登录账号：作答等变更防抖同步到服务端（跨设备续答）
   React.useEffect(() => {
     if (!progressReady || !syncToServer || suppressServerSyncRef.current) return;
+    if (skipNextAutoSyncRef.current) {
+      skipNextAutoSyncRef.current = false;
+      return;
+    }
     const timer = window.setTimeout(() => {
       void flushProgressToServer();
     }, PROGRESS_SYNC_DEBOUNCE_MS);
