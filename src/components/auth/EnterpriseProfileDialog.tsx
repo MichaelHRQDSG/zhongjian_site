@@ -12,6 +12,7 @@ import {
 import {
   fetchEnterpriseOnboardingProgress,
   putEnterpriseOnboardingProgressWithRetry,
+  type OnboardingProgressSnapshot,
 } from '@/lib/enterprise-onboarding-progress';
 
 async function fetchEnterpriseFieldConfig(apiBaseUrl: string, slug: string) {
@@ -154,7 +155,7 @@ export function EnterpriseProfileDialog({
   const [visibleFields, setVisibleFields] = useState<string[]>(DEFAULT_VISIBLE);
   const [customFields, setCustomFields] = useState<Array<{ id: string; label: string }>>([]);
   const [form, setForm] = useState<Record<string, string>>({ ...EMPTY_EMPLOYEE_INFO_FORM });
-  const [progressBase, setProgressBase] = useState<Record<string, unknown> | null>(null);
+  const [progressBase, setProgressBase] = useState<OnboardingProgressSnapshot | null>(null);
 
   useEffect(() => {
     if (!open || !slug) return undefined;
@@ -193,7 +194,7 @@ export function EnterpriseProfileDialog({
         setForm({ ...EMPTY_EMPLOYEE_INFO_FORM, ...Object.fromEntries(
           Object.entries(basic).map(([k, v]) => [k, v == null ? '' : String(v)]),
         ) });
-        setProgressBase(progress || { exists: false });
+        setProgressBase(progress);
       } catch {
         if (!cancelled) setError('加载个人信息失败，请稍后重试');
       } finally {
@@ -224,25 +225,24 @@ export function EnterpriseProfileDialog({
     setError('');
     setNotice('');
     try {
-      const baseProgress = progressBase && typeof progressBase === 'object' ? progressBase : {};
       const saved = await putEnterpriseOnboardingProgressWithRetry(base, slug, {
-        step: String(baseProgress.step || 'select'),
-        activeScaleId: String(baseProgress.activeScaleId || ''),
+        step: String(progressBase?.step || 'select'),
+        activeScaleId: String(progressBase?.activeScaleId || ''),
         answersByScale:
-          baseProgress.answersByScale && typeof baseProgress.answersByScale === 'object'
-            ? (baseProgress.answersByScale as Record<string, unknown>)
+          progressBase?.answersByScale && typeof progressBase.answersByScale === 'object'
+            ? progressBase.answersByScale
             : {},
         basicInfo: form,
-        completedScaleIds: Array.isArray(baseProgress.completedScaleIds)
-          ? baseProgress.completedScaleIds.map(String)
+        completedScaleIds: Array.isArray(progressBase?.completedScaleIds)
+          ? progressBase.completedScaleIds.map(String)
           : [],
         resultsByScale:
-          baseProgress.resultsByScale && typeof baseProgress.resultsByScale === 'object'
-            ? (baseProgress.resultsByScale as Record<string, unknown>)
+          progressBase?.resultsByScale && typeof progressBase.resultsByScale === 'object'
+            ? progressBase.resultsByScale
             : {},
-        status: baseProgress.status === 'completed' ? 'completed' : 'in_progress',
+        status: progressBase?.status === 'completed' ? 'completed' : 'in_progress',
         clientUpdatedAt:
-          typeof baseProgress.updatedAt === 'string' ? baseProgress.updatedAt : null,
+          typeof progressBase?.updatedAt === 'string' ? progressBase.updatedAt : null,
       });
       if (saved) {
         setProgressBase(saved);
