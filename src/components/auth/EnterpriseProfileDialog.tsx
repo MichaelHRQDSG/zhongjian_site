@@ -11,6 +11,7 @@ import {
 } from '@/lib/enterprise-employee-info';
 import {
   fetchEnterpriseOnboardingProgress,
+  OnboardingProgressConflictError,
   putEnterpriseOnboardingProgressWithRetry,
   type OnboardingProgressSnapshot,
 } from '@/lib/enterprise-onboarding-progress';
@@ -195,6 +196,9 @@ export function EnterpriseProfileDialog({
           Object.entries(basic).map(([k, v]) => [k, v == null ? '' : String(v)]),
         ) });
         setProgressBase(progress);
+        if (Object.values(basic).some((value) => String(value || '').trim())) {
+          setNotice('已载入云端保存的个人信息');
+        }
       } catch {
         if (!cancelled) setError('加载个人信息失败，请稍后重试');
       } finally {
@@ -225,24 +229,27 @@ export function EnterpriseProfileDialog({
     setError('');
     setNotice('');
     try {
+      const remote = await fetchEnterpriseOnboardingProgress(base, slug);
+      const source = remote || progressBase;
+      if (remote) setProgressBase(remote);
       const saved = await putEnterpriseOnboardingProgressWithRetry(base, slug, {
-        step: String(progressBase?.step || 'select'),
-        activeScaleId: String(progressBase?.activeScaleId || ''),
+        step: String(source?.step || 'select'),
+        activeScaleId: String(source?.activeScaleId || ''),
         answersByScale:
-          progressBase?.answersByScale && typeof progressBase.answersByScale === 'object'
-            ? progressBase.answersByScale
+          source?.answersByScale && typeof source.answersByScale === 'object'
+            ? source.answersByScale
             : {},
         basicInfo: form,
-        completedScaleIds: Array.isArray(progressBase?.completedScaleIds)
-          ? progressBase.completedScaleIds.map(String)
+        completedScaleIds: Array.isArray(source?.completedScaleIds)
+          ? source.completedScaleIds.map(String)
           : [],
         resultsByScale:
-          progressBase?.resultsByScale && typeof progressBase.resultsByScale === 'object'
-            ? progressBase.resultsByScale
+          source?.resultsByScale && typeof source.resultsByScale === 'object'
+            ? source.resultsByScale
             : {},
-        status: progressBase?.status === 'completed' ? 'completed' : 'in_progress',
+        status: source?.status === 'completed' ? 'completed' : 'in_progress',
         clientUpdatedAt:
-          typeof progressBase?.updatedAt === 'string' ? progressBase.updatedAt : null,
+          typeof source?.updatedAt === 'string' ? source.updatedAt : null,
       });
       if (saved) {
         setProgressBase(saved);
@@ -252,7 +259,19 @@ export function EnterpriseProfileDialog({
         setError('保存失败，请稍后重试');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '保存失败，请稍后重试');
+      if (err instanceof OnboardingProgressConflictError) {
+        setProgressBase(err.progress);
+        const basic = err.progress.basicInfo && typeof err.progress.basicInfo === 'object'
+          ? err.progress.basicInfo
+          : {};
+        setForm({
+          ...EMPTY_EMPLOYEE_INFO_FORM,
+          ...Object.fromEntries(Object.entries(basic).map(([k, v]) => [k, v == null ? '' : String(v)])),
+        });
+        setError('其他设备刚更新了进度，已载入最新基本信息，请确认后再保存');
+      } else {
+        setError(err instanceof Error ? err.message : '保存失败，请稍后重试');
+      }
     } finally {
       setSaving(false);
     }

@@ -247,6 +247,7 @@ export async function putEnterpriseOnboardingProgress(
   apiBaseUrl: string,
   slug: string,
   body: OnboardingProgressPutBody,
+  options?: { keepalive?: boolean },
 ): Promise<OnboardingProgressSnapshot | null> {
   if (!slug) return null;
   const token = readEnterpriseToken(slug);
@@ -258,6 +259,7 @@ export async function putEnterpriseOnboardingProgress(
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
+      keepalive: Boolean(options?.keepalive),
       body: JSON.stringify({
         step: body.step,
         activeScaleId: body.activeScaleId || "",
@@ -309,11 +311,12 @@ export async function putEnterpriseOnboardingProgressWithRetry(
   slug: string,
   body: OnboardingProgressPutBody,
   attempts = 3,
+  options?: { keepalive?: boolean },
 ): Promise<OnboardingProgressSnapshot | null> {
   let lastError: unknown;
   for (let i = 0; i < attempts; i += 1) {
     try {
-      return await putEnterpriseOnboardingProgress(apiBaseUrl, slug, body);
+      return await putEnterpriseOnboardingProgress(apiBaseUrl, slug, body, options);
     } catch (error) {
       if (error instanceof OnboardingProgressConflictError) throw error;
       lastError = error;

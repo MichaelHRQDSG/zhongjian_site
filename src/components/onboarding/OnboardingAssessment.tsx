@@ -141,6 +141,10 @@ const OnboardingAssessment = ({
   const submittingRef = React.useRef(false);
   const serverUpdatedAtRef = React.useRef(null);
   const suppressServerSyncRef = React.useRef(true);
+  const lastRemoteRef = React.useRef<OnboardingProgressSnapshot | null>(null);
+  const remoteLoadedRef = React.useRef(false);
+  const stepRef = React.useRef(step);
+  stepRef.current = step;
   const basicComplete = isEmployeeInfoComplete(basicForm, employeeInfoFields);
 
   const activeScale = React.useMemo(
@@ -148,7 +152,24 @@ const OnboardingAssessment = ({
     [activeScales, activeScaleId],
   );
   const currentResult = resultsByScale[activeScaleId] || null;
-  const completedCount = completedScaleIds.length;
+  const completedIdsForUi = React.useMemo(() => {
+    const ids = new Set((completedScaleIds || []).map(String));
+    Object.entries(resultsByScale || {}).forEach(([id, value]) => {
+      if (value && typeof value === 'object' && (value.publicId || value.submittedAt || value.result)) {
+        ids.add(String(id));
+      }
+    });
+    return Array.from(ids);
+  }, [completedScaleIds, resultsByScale]);
+  const completedCount = completedIdsForUi.length;
+  const inProgressScaleIds = React.useMemo(() => {
+    const done = new Set((completedScaleIds || []).map(String));
+    return Object.keys(answersByScale || {}).filter((id) => {
+      if (done.has(String(id))) return false;
+      const answers = answersByScale[id];
+      return Boolean(answers && typeof answers === 'object' && Object.keys(answers).length > 0);
+    });
+  }, [answersByScale, completedScaleIds]);
   const allDone = activeScales.length > 0 && completedCount >= activeScales.length;
   const reportScales = React.useMemo(() => {
     if (activeScale) return [activeScale];
@@ -199,18 +220,27 @@ const OnboardingAssessment = ({
     ) {
       restored = 'select';
     }
-    if (restored) setStep(restored);
+    const answering = stepRef.current === 'scale' || stepRef.current === 'scaleResult';
+    if (restored && !answering) setStep(restored);
     if (snap.answersByScale && typeof snap.answersByScale === 'object') {
       setAnswersByScale(snap.answersByScale);
-    }
-    if (Array.isArray(snap.completedScaleIds)) {
-      setCompletedScaleIds(snap.completedScaleIds.map(String));
     }
     if (snap.resultsByScale && typeof snap.resultsByScale === 'object') {
       setResultsByScale(snap.resultsByScale);
     }
     if (snap.activeScaleId) setActiveScaleId(String(snap.activeScaleId));
+    const reportIds = Array.isArray(snap.submittedReports)
+      ? snap.submittedReports.map((item) => String(item?.assessmentId || '')).filter(Boolean)
+      : [];
+    if (reportIds.length || Array.isArray(snap.completedScaleIds)) {
+      const merged = Array.from(new Set([
+        ...(Array.isArray(snap.completedScaleIds) ? snap.completedScaleIds.map(String) : []),
+        ...reportIds,
+      ]));
+      setCompletedScaleIds(merged);
+    }
     serverUpdatedAtRef.current = snap.updatedAt || null;
+    lastRemoteRef.current = snap;
   }, [employeeInfoFields, normalizeRestorableStep]);
 
   const buildProgressPutBody = React.useCallback((overrides = {}) => {
@@ -243,18 +273,49 @@ const OnboardingAssessment = ({
     step,
   ]);
 
+  const mergeWithRemote = React.useCallback((body) => {
+    const remote = lastRemoteRef.current;
+    if (!remote) return body;
+    const remoteAnswers = remote.answersByScale && typeof remote.answersByScale === 'object' ? remote.answersByScale : {};
+    const localAnswers = body.answersByScale && typeof body.answersByScale === 'object' ? body.answersByScale : {};
+    const answersByScale = { ...remoteAnswers };
+    Object.entries(localAnswers).forEach(([scaleId, answers]) => {
+      if (!answers || typeof answers !== 'object' || !Object.keys(answers).length) return;
+      answersByScale[scaleId] = { ...(answersByScale[scaleId] || {}), ...answers };
+    });
+    const remoteBasic = remote.basicInfo && typeof remote.basicInfo === 'object' ? remote.basicInfo : {};
+    const localBasic = body.basicInfo && typeof body.basicInfo === 'object' ? body.basicInfo : {};
+    const basicInfo = { ...remoteBasic };
+    Object.entries(localBasic).forEach(([key, value]) => {
+      if (value != null && String(value).trim() !== '') basicInfo[key] = value;
+    });
+    const completedScaleIds = Array.from(new Set([
+      ...(Array.isArray(remote.completedScaleIds) ? remote.completedScaleIds.map(String) : []),
+      ...(Array.isArray(remote.submittedReports) ? remote.submittedReports.map((item) => String(item?.assessmentId || '')).filter(Boolean) : []),
+      ...(body.completedScaleIds || []).map(String),
+    ]));
+    const remoteResults = remote.resultsByScale && typeof remote.resultsByScale === 'object' ? remote.resultsByScale : {};
+    const localResults = body.resultsByScale && typeof body.resultsByScale === 'object' ? body.resultsByScale : {};
+    return {
+      ...body,
+      answersByScale,
+      basicInfo,
+      completedScaleIds,
+      resultsByScale: { ...remoteResults, ...localResults },
+      status: body.status === 'completed' || remote.status === 'completed' ? 'completed' : body.status,
+    };
+  }, []);
+
   const flushProgressToServer = React.useCallback(async (overrides = {}, options = {}) => {
-    if (!syncToServer || !slug) return null;
+    if (!syncToServer || !slug || !remoteLoadedRef.current) return null;
     const retry = Boolean(options.retry);
-    const applyRemote = Boolean(options.applyRemote);
+    const keepalive = Boolean(options.keepalive);
     try {
-      const body = buildProgressPutBody(overrides);
+      const body = mergeWithRemote(buildProgressPutBody(overrides));
       const saved = retry
-        ? await putEnterpriseOnboardingProgressWithRetry(apiBaseUrl, slug, body)
-        : await putEnterpriseOnboardingProgress(apiBaseUrl, slug, body);
-      if (saved?.updatedAt) serverUpdatedAtRef.current = saved.updatedAt;
-      // 仅在提交后对齐时回写服务端校准结果，避免防抖保存反复 setState
-      if (applyRemote && saved) {
+        ? await putEnterpriseOnboardingProgressWithRetry(apiBaseUrl, slug, body, 3, { keepalive })
+        : await putEnterpriseOnboardingProgress(apiBaseUrl, slug, body, { keepalive });
+      if (saved) {
         suppressServerSyncRef.current = true;
         applyProgressSnapshot(saved);
         queueMicrotask(() => { suppressServerSyncRef.current = false; });
@@ -268,15 +329,15 @@ const OnboardingAssessment = ({
         queueMicrotask(() => { suppressServerSyncRef.current = false; });
         return error.progress;
       }
-      // 网络失败不打断作答；本机 localStorage 仍可续
+      setSyncNotice('进度暂未同步到服务器，请保持页面打开稍候');
       return null;
     }
-  }, [apiBaseUrl, applyProgressSnapshot, buildProgressPutBody, slug, syncToServer]);
-
+  }, [apiBaseUrl, applyProgressSnapshot, buildProgressPutBody, mergeWithRemote, slug, syncToServer]);
   React.useEffect(() => {
     let cancelled = false;
     setProgressReady(false);
     suppressServerSyncRef.current = true;
+    remoteLoadedRef.current = false;
     (async () => {
       try {
         if (resolvedAccountId && slug) {
@@ -300,11 +361,11 @@ const OnboardingAssessment = ({
           restored = 'select';
         }
         if (restored) setStep(restored);
-        const savedAnswers = localStorage.getItem(answersKey);
-        if (savedAnswers) {
-          const parsed = JSON.parse(savedAnswers);
-          if (parsed && typeof parsed === 'object') setAnswersByScale(parsed);
-        }
+      const savedAnswers = localStorage.getItem(answersKey);
+      if (savedAnswers) {
+        const parsed = JSON.parse(savedAnswers);
+        if (parsed && typeof parsed === 'object') setAnswersByScale(parsed);
+      }
         const savedCompleted = localStorage.getItem(completedKey);
         if (savedCompleted) {
           const parsed = JSON.parse(savedCompleted);
@@ -335,22 +396,27 @@ const OnboardingAssessment = ({
             && (
               remote.exists
               || (remote.completedScaleIds || []).length > 0
+              || (remote.submittedReports || []).length > 0
               || isEmployeeInfoComplete(remote.basicInfo, employeeInfoFields)
+              || (remote.basicInfo && Object.values(remote.basicInfo).some((value) => String(value || '').trim()))
               || (remote.answersByScale && Object.keys(remote.answersByScale).length > 0)
             );
+          if (!cancelled && remote) lastRemoteRef.current = remote;
           if (!cancelled && hasRemote) {
             applyProgressSnapshot(remote);
+            setSyncNotice('已恢复云端保存的个人信息和答题进度');
           } else if (!cancelled && remote?.updatedAt) {
             serverUpdatedAtRef.current = remote.updatedAt;
           }
         }
-      } catch {
+    } catch {
         if (!cancelled) {
           const key = slug ? getEnterpriseVisitorKey(slug, resolvedAccountId) : createVisitorKey();
-          setVisitorKey(key);
-        }
+      setVisitorKey(key);
+    }
       } finally {
         if (!cancelled) {
+          remoteLoadedRef.current = true;
           suppressServerSyncRef.current = false;
           setProgressReady(true);
         }
@@ -425,6 +491,22 @@ const OnboardingAssessment = ({
 
   React.useEffect(() => {
     if (!syncNotice) return;
+    if (!syncToServer) return undefined;
+    const flushNow = () => {
+      void flushProgressToServer({}, { keepalive: true });
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') flushNow();
+    };
+    window.addEventListener('pagehide', flushNow);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('pagehide', flushNow);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [flushProgressToServer, syncToServer]);
+
+  React.useEffect(() => {
     const timer = window.setTimeout(() => setSyncNotice(''), 4000);
     return () => window.clearTimeout(timer);
   }, [syncNotice]);
@@ -458,7 +540,7 @@ const OnboardingAssessment = ({
 
   const openScale = React.useCallback((scaleId) => {
     setActiveScaleId(scaleId);
-    setSubmitError('');
+      setSubmitError('');
     goto('scale');
   }, []);
 
@@ -482,11 +564,11 @@ const OnboardingAssessment = ({
   }, [activeScaleId, activeScales]);
 
   const buildAnswersForScale = React.useCallback((scale) => {
-    const raw = answersByScale[scale.id] || {};
-    const answers = {};
-    (scale.items || []).forEach((item, index) => {
-      const questionId = item?.id || String(index);
-      const value = raw[questionId] ?? raw[index];
+          const raw = answersByScale[scale.id] || {};
+          const answers = {};
+          (scale.items || []).forEach((item, index) => {
+            const questionId = item?.id || String(index);
+            const value = raw[questionId] ?? raw[index];
       if (scale?.scale === 'dynamic' && item && typeof item === 'object') {
         const serialized = serializeDynamicQuestionAnswer(item, value);
         if (serialized !== undefined) {
@@ -494,10 +576,10 @@ const OnboardingAssessment = ({
         }
         return;
       }
-      if (value != null && value !== '') {
-        answers[questionId] = String(value);
-      }
-    });
+            if (value != null && value !== '') {
+              answers[questionId] = String(value);
+            }
+          });
     return answers;
   }, [answersByScale]);
 
@@ -565,7 +647,7 @@ const OnboardingAssessment = ({
       // apiBaseUrl 允许为空（同源 /api + Next rewrite）；仅缺 slug 或非动态量表时走演示
       if (!slug || scale.scale !== 'dynamic') {
         const mock = {
-          assessmentId: scale.id,
+            assessmentId: scale.id,
           assessmentTitle: scale.name,
           assessmentSubtitle: scale.subtitle,
           resultSummary: '演示环境：未连接企业测评接口，以下为示意结果。',
@@ -716,8 +798,9 @@ const OnboardingAssessment = ({
         {step === 'select' && (
           <StepScaleSelect
             scales={activeScales}
-            completedScaleIds={completedScaleIds}
+            completedScaleIds={completedIdsForUi}
             allDone={allDone}
+            inProgressScaleIds={inProgressScaleIds}
             primary={primary}
             primaryDark={primaryDark}
             homeHref={homeHref}
@@ -889,10 +972,10 @@ const StepWelcome = ({ assessmentCount, primary, primaryDark, accent, companyNam
           className="gxa-onb-welcome-start"
           onClick={onNext}
           style={{
-            background: primary, color: '#fff', border: 'none',
-            padding: '16px 40px', fontSize: 15, borderRadius: 4, cursor: 'pointer',
+          background: primary, color: '#fff', border: 'none',
+          padding: '16px 40px', fontSize: 15, borderRadius: 4, cursor: 'pointer',
             fontWeight: 500, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-            boxShadow: `0 10px 24px -10px ${primary}66`,
+          boxShadow: `0 10px 24px -10px ${primary}66`,
             whiteSpace: 'nowrap', flexShrink: 0, boxSizing: 'border-box',
           }}
         >
@@ -939,10 +1022,10 @@ const StepWelcome = ({ assessmentCount, primary, primaryDark, accent, companyNam
 
 // ==================== 知情同意书内容 / 弹层 ====================
 const CONSENT_HIGHLIGHTS = [
-  { icon: 'lock', title: '完全保密', desc: '测评结果仅您本人可见，不进入人事档案、不影响录用晋升' },
-  { icon: 'shield', title: '第三方托管', desc: '数据由独立 EAP 机构（连心心理）加密存储，物理隔离于人事系统' },
-  { icon: 'edit', title: '匿名 ID', desc: '数据以匿名 ID 保存，聚合分析时脱敏，管理者仅见部门级汇总' },
-  { icon: 'check', title: '自愿参与', desc: '您可随时中止测评，进度自动保存；也可随时申请删除全部数据' },
+            { icon: 'lock', title: '完全保密', desc: '测评结果仅您本人可见，不进入人事档案、不影响录用晋升' },
+            { icon: 'shield', title: '第三方托管', desc: '数据由独立 EAP 机构（连心心理）加密存储，物理隔离于人事系统' },
+            { icon: 'edit', title: '匿名 ID', desc: '数据以匿名 ID 保存，聚合分析时脱敏，管理者仅见部门级汇总' },
+            { icon: 'check', title: '自愿参与', desc: '您可随时中止测评，进度自动保存；也可随时申请删除全部数据' },
 ];
 
 const ConsentDocumentBody = ({ primary }) => (
@@ -950,25 +1033,25 @@ const ConsentDocumentBody = ({ primary }) => (
     <div className="gxa-consent-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16, marginBottom: 24 }}>
       {CONSENT_HIGHLIGHTS.map(c => (
         <div key={c.title} style={{ display: 'flex', gap: 14, padding: 16, background: '#FBFAF7', borderRadius: 6 }}>
-          <div style={{ width: 40, height: 40, borderRadius: 8, background: '#fff', color: primary, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <Icon name={c.icon} size={18}/>
-          </div>
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 600, color: '#0F2E5F', fontFamily: '"Noto Serif SC", serif' }}>{c.title}</div>
-            <div style={{ fontSize: 13, color: '#4A5A78', lineHeight: 1.7, marginTop: 6 }}>{c.desc}</div>
-          </div>
+              <div style={{ width: 40, height: 40, borderRadius: 8, background: '#fff', color: primary, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Icon name={c.icon} size={18}/>
+              </div>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: '#0F2E5F', fontFamily: '"Noto Serif SC", serif' }}>{c.title}</div>
+                <div style={{ fontSize: 13, color: '#4A5A78', lineHeight: 1.7, marginTop: 6 }}>{c.desc}</div>
+              </div>
+            </div>
+          ))}
         </div>
-      ))}
-    </div>
     <div style={{ border: '1px solid #E8ECF3', borderRadius: 6, padding: '24px 28px', fontSize: 13, color: '#4A5A78', lineHeight: 1.9 }}>
-      <div style={{ fontSize: 14, fontWeight: 600, color: '#0F2E5F', marginBottom: 12 }}>《心理测评知情同意书》</div>
-      <p style={{ margin: '0 0 12px' }}><strong>一、测评目的</strong><br/>本次测评旨在帮助您了解自身心理健康状态，建立个人心理基线档案，并为您提供个性化的心理支持建议。</p>
-      <p style={{ margin: '0 0 12px' }}><strong>二、保密条款</strong><br/>1. 您的测评结果仅您本人可见；<br/>2. 数据由第三方 EAP 机构独立存储，企业人事、行政、您的直接上级均无权访问原始数据；<br/>3. 仅在您签署额外授权后，才可向指定咨询师分享测评结果；<br/>4. 聚合数据（部门级别）会用于内部心理健康趋势分析，但已完全脱敏。</p>
-      <p style={{ margin: '0 0 12px' }}><strong>三、异常情况处理</strong><br/>若测评结果显示您可能存在严重的心理困扰或自伤自杀风险，EAP 咨询师将主动通过系统内消息联系您，此过程<strong>不会通知任何管理者</strong>。</p>
-      <p style={{ margin: '0 0 12px' }}><strong>四、您的权利</strong><br/>1. 随时中止测评；<br/>2. 随时申请删除您的全部数据；<br/>3. 申请导出个人测评报告；<br/>4. 对结果解读申请免费复议咨询。</p>
-      <p style={{ margin: '0 0 12px' }}><strong>五、数据保存期限</strong><br/>您的原始测评数据保存 3 年，之后自动匿名化归档。</p>
+          <div style={{ fontSize: 14, fontWeight: 600, color: '#0F2E5F', marginBottom: 12 }}>《心理测评知情同意书》</div>
+          <p style={{ margin: '0 0 12px' }}><strong>一、测评目的</strong><br/>本次测评旨在帮助您了解自身心理健康状态，建立个人心理基线档案，并为您提供个性化的心理支持建议。</p>
+          <p style={{ margin: '0 0 12px' }}><strong>二、保密条款</strong><br/>1. 您的测评结果仅您本人可见；<br/>2. 数据由第三方 EAP 机构独立存储，企业人事、行政、您的直接上级均无权访问原始数据；<br/>3. 仅在您签署额外授权后，才可向指定咨询师分享测评结果；<br/>4. 聚合数据（部门级别）会用于内部心理健康趋势分析，但已完全脱敏。</p>
+          <p style={{ margin: '0 0 12px' }}><strong>三、异常情况处理</strong><br/>若测评结果显示您可能存在严重的心理困扰或自伤自杀风险，EAP 咨询师将主动通过系统内消息联系您，此过程<strong>不会通知任何管理者</strong>。</p>
+          <p style={{ margin: '0 0 12px' }}><strong>四、您的权利</strong><br/>1. 随时中止测评；<br/>2. 随时申请删除您的全部数据；<br/>3. 申请导出个人测评报告；<br/>4. 对结果解读申请免费复议咨询。</p>
+          <p style={{ margin: '0 0 12px' }}><strong>五、数据保存期限</strong><br/>您的原始测评数据保存 3 年，之后自动匿名化归档。</p>
       <p style={{ margin: 0 }}>如有疑问，请发送邮件至 privacy@eap-service.com。</p>
-    </div>
+        </div>
   </>
 );
 
@@ -1025,10 +1108,10 @@ const ConsentModal = ({ open, onClose, primary }) => {
           >
             ×
           </button>
-        </div>
+          </div>
         <div style={{ padding: '20px 22px 28px', overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
           <ConsentDocumentBody primary={primary}/>
-        </div>
+      </div>
         <div style={{ padding: '14px 22px', borderTop: '1px solid #E8ECF3', flexShrink: 0, display: 'flex', justifyContent: 'flex-end' }}>
           <button
             type="button"
@@ -1188,7 +1271,7 @@ const StepBasic = ({ primary, primaryDark, onNext, onBack, visibleFields, custom
                   />
                 </FormField>
               ))}
-            </div>
+      </div>
           </>
         )}
 
@@ -1356,6 +1439,7 @@ const StepScaleSelect = ({
   scales,
   completedScaleIds,
   allDone,
+  inProgressScaleIds,
   primary,
   primaryDark,
   homeHref,
@@ -1364,6 +1448,7 @@ const StepScaleSelect = ({
   onViewResult,
 }) => {
   const doneSet = new Set(completedScaleIds || []);
+  const progressSet = new Set(inProgressScaleIds || []);
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
       <StepIntro
@@ -1398,6 +1483,7 @@ const StepScaleSelect = ({
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 28 }}>
         {(scales || []).map((scale, index) => {
           const done = doneSet.has(scale.id);
+          const inProgress = !done && progressSet.has(scale.id);
           return (
             <div
               key={scale.id || index}
@@ -1431,12 +1517,12 @@ const StepScaleSelect = ({
                   }}>
                     {scale.name}
                   </h3>
-                  {done ? (
+                  {done || inProgress ? (
                     <span style={{
                       fontSize: 11, fontWeight: 600, color: primary,
                       background: `${primary}12`, padding: '3px 8px', borderRadius: 999,
                     }}>
-                      已完成
+                      {done ? '已完成' : '作答中'}
                     </span>
                   ) : null}
                 </div>
@@ -1472,7 +1558,7 @@ const StepScaleSelect = ({
                     padding: '11px 18px', borderRadius: 4, fontSize: 14, fontWeight: 600, cursor: 'pointer',
                   }}
                 >
-                  {done ? '重新作答' : '开始作答'}
+                  {done ? '重新作答' : inProgress ? '继续作答' : '开始作答'}
                 </button>
               </div>
             </div>
@@ -1662,20 +1748,20 @@ const StepScale = ({
                             setAns(item, i, optId);
                           }}
                           style={{
-                            padding: '12px 8px', textAlign: 'center',
+                      padding: '12px 8px', textAlign: 'center',
                             background: isOptionSelected ? primary : '#fff',
                             color: isOptionSelected ? '#fff' : '#4A5A78',
                             border: isOptionSelected ? `1.5px solid ${primary}` : '1.5px solid #E8ECF3',
-                            borderRadius: 4, cursor: 'pointer', fontSize: 13,
+                      borderRadius: 4, cursor: 'pointer', fontSize: 13,
                             whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'anywhere', lineHeight: 1.45,
                             minWidth: 0,
                           }}
                         >
                           {option.label || option.text}
-                        </button>
+                    </button>
                       );
                     })}
-                  </div>
+                </div>
                   {followUp ? (
                     <div style={{ marginTop: 12, marginLeft: 38, padding: '12px 14px', background: '#fff', border: '1px dashed #D0D6E0', borderRadius: 4 }}>
                       <div style={{ marginBottom: 8, fontSize: 12, color: '#4A5A78' }}>
@@ -2067,20 +2153,20 @@ function formatReportNo(publicId) {
 }
 
 const DEFAULT_SUGGESTION_CARDS = [
-  {
-    icon: 'clock',
+    {
+      icon: 'clock',
     title: '关注当下状态',
     desc: '建议结合近期作息、压力与情绪变化进行自我观察，如困扰持续可使用 EAP 资源。',
-    action: '查看自我调节建议',
-  },
-  {
-    icon: 'group',
-    title: '主动建立支持网络',
+      action: '查看自我调节建议',
+    },
+    {
+      icon: 'group',
+      title: '主动建立支持网络',
     desc: '建议与信任的人保持沟通，或在需要时预约 EAP 咨询，扩展可求助的支持网络。',
-    action: '查看近期活动',
-  },
-  {
-    icon: 'sparkle',
+      action: '查看近期活动',
+    },
+    {
+      icon: 'sparkle',
     title: '持续关照自己',
     desc: '保持对内在感受的关注，在忙碌中给自己留出喘息与恢复的空间。',
     action: '了解更多',
@@ -2550,20 +2636,20 @@ const StepReport = ({
 
           {ring ? (
             <div className="gxa-report-score" style={{ position: 'relative', width: 168, height: 168, flexShrink: 0 }}>
-              <svg viewBox="0 0 160 160" style={{ width: '100%', height: '100%' }}>
-                <circle cx="80" cy="80" r="66" fill="none" stroke="rgba(255,255,255,.15)" strokeWidth="10"/>
-                <circle cx="80" cy="80" r="66" fill="none" stroke="#fff" strokeWidth="10"
+            <svg viewBox="0 0 160 160" style={{ width: '100%', height: '100%' }}>
+              <circle cx="80" cy="80" r="66" fill="none" stroke="rgba(255,255,255,.15)" strokeWidth="10"/>
+              <circle cx="80" cy="80" r="66" fill="none" stroke="#fff" strokeWidth="10"
                   strokeDasharray={`${(clamp01(ring.progress / 100)) * 414.7} 414.7`}
                   strokeLinecap="round" transform="rotate(-90 80 80)"
                   style={{ transition: 'stroke-dasharray 1s ease' }}/>
-              </svg>
+            </svg>
               <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
                 <div style={{ fontSize: 11, opacity: .8, letterSpacing: 1, maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ring.caption}</div>
                 <div className="gxa-report-score-num" style={{ fontSize: 40, fontWeight: 700, fontFamily: SERIF, lineHeight: 1.1, marginTop: 2 }}>{ring.value}</div>
                 <div style={{ fontSize: 11, opacity: .75 }}>{ring.sub}</div>
                 <div style={{ fontSize: 11, marginTop: 5, background: 'rgba(255,255,255,.18)', padding: '2px 10px', borderRadius: 3, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ring.level}</div>
-              </div>
             </div>
+          </div>
           ) : matchImage ? (
             <div className="gxa-report-score" style={{ width: 168, height: 168, borderRadius: 12, overflow: 'hidden', border: '3px solid rgba(255,255,255,.35)', flexShrink: 0 }}>
               <img src={matchImage} alt={match?.title || ''} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}/>
@@ -2591,7 +2677,7 @@ const StepReport = ({
           {model.quadrants.map((quadrant) => (
             <ZjQuadrant key={quadrant.id} quadrant={quadrant} primary={primary}/>
           ))}
-        </div>
+                  </div>
       ) : null}
 
       {radarItems.length >= 3 ? (
@@ -2601,8 +2687,8 @@ const StepReport = ({
             <p style={{ fontSize: 13, color: '#4A5A78', margin: '6px 0 20px' }}>各维度得分在其满分中的位置</p>
             <div className="gxa-report-radar">
               <RadarChart items={radarItems} primary={primary}/>
-            </div>
-          </div>
+                </div>
+              </div>
           <div className="gxa-report-panel" style={{ background: '#fff', borderRadius: 8, padding: 32, boxShadow: '0 2px 20px rgba(15,46,95,.04)', minWidth: 0 }}>
             <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: '#0F2E5F', fontFamily: SERIF }}>维度一览</h3>
             <p style={{ fontSize: 13, color: '#4A5A78', margin: '6px 0 20px' }}>点击查看对应维度的详细解读</p>
@@ -2635,8 +2721,8 @@ const StepReport = ({
               ) : null}
               {group.items.map((item) => (
                 <ZjDimensionCard key={item.id} item={item} primary={primary}/>
-              ))}
-            </div>
+            ))}
+          </div>
           ))}
         </div>
       ) : null}
@@ -2653,7 +2739,7 @@ const StepReport = ({
           {match.shareText ? (
             <div style={{ marginTop: 18, padding: '12px 14px', background: `${primary}08`, borderRadius: 6, fontSize: 13, color: primary, lineHeight: 1.7 }}>
               {match.shareText}
-            </div>
+      </div>
           ) : null}
         </div>
       ) : null}
@@ -2697,7 +2783,7 @@ const StepReport = ({
       </div>
 
       {showResultPager ? (
-        <div style={{
+                <div style={{
           marginTop: 28, padding: '14px 18px', borderRadius: 8,
           background: '#fff', border: '1px solid #E8ECF3',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
@@ -2714,10 +2800,10 @@ const StepReport = ({
             }}
           >
             ← 上一张结果
-          </button>
+                </button>
           <div style={{ fontSize: 14, color: '#4A5A78', textAlign: 'center', flex: 1 }}>
             {resultPageIndex + 1} / {resultPageTotal}
-          </div>
+              </div>
           <button
             type="button"
             onClick={onNextResult}
