@@ -1634,13 +1634,9 @@ const StepScaleResult = ({ scale, report, primary, primaryDark, accent, onBack }
           </p>
         ) : null}
         {renderScaleResultBody(result, primary, accent)}
-        {scale?.disclaimer ? (
-          <p style={{ margin: '24px 0 0', fontSize: 12, color: '#8B96A8', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{scale.disclaimer}</p>
-        ) : (
-          <p style={{ margin: '24px 0 0', fontSize: 12, color: '#8B96A8', lineHeight: 1.7 }}>
-            本结果仅供参考，不作为临床诊断依据。
-          </p>
-        )}
+        <p style={{ margin: '24px 0 0', fontSize: 12, color: '#8B96A8', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+          {scale?.disclaimer || '本结果仅供参考，不作为临床诊断依据。'}
+        </p>
       </div>
 
       <div style={{ marginTop: 28, display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
