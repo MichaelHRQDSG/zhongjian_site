@@ -20,6 +20,11 @@ export default async function EnterpriseOnboardingPage({
   }
   if (payload.assessments.length === 0) notFound();
 
+  const accountId =
+    payload.sessionUser && typeof payload.sessionUser.id === "number"
+      ? payload.sessionUser.id
+      : null;
+
   return (
     <OnboardingAssessment
       companyName={payload.companyName}
@@ -28,6 +33,7 @@ export default async function EnterpriseOnboardingPage({
       slogan={payload.slogan}
       homeHref={`/${slug}`}
       slug={slug}
+      accountId={accountId}
       // 同源空串 → 浏览器打 /api/...，由 Next rewrite 到本机 backend（勿注 127.0.0.1）
       apiBaseUrl={getBrowserAssessmentApiBaseUrl()}
       scales={toOnboardingScales(payload)}

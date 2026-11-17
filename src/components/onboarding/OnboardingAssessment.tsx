@@ -5,8 +5,19 @@ import React from 'react';
 import { Icon } from '@/components/shared/data';
 import { SiteBeian } from '@/components/shared/SiteBeian';
 import { submitEnterpriseOnboardingReports } from '@/lib/enterprise-assessments';
-// 访客标识与知识库学习回传共用（localStorage `onb-visitor-{slug}`），后台据此把学习记录归到同一份员工档案
-import { createVisitorKey } from '@/lib/enterprise-learning';
+// 访客标识按账号隔离（`onb-visitor-{slug}-a-{accountId}`），与知识库学习回传共用
+import { writeEnterpriseAccountId } from '@/lib/enterprise-auth';
+import {
+  OnboardingProgressConflictError,
+  fetchEnterpriseOnboardingProgress,
+  onboardingStorageKeys,
+  onboardingStorageScope,
+  purgeLegacySharedOnboardingKeys,
+  putEnterpriseOnboardingProgress,
+  putEnterpriseOnboardingProgressWithRetry,
+  type OnboardingProgressSnapshot,
+} from '@/lib/enterprise-onboarding-progress';
+import { createVisitorKey, getEnterpriseVisitorKey } from '@/lib/enterprise-learning';
 import { bandForScore, buildReportVisualModel, formatVisualScore } from '@/lib/report-visual-model';
 import {
   getOnboardingQuestionInputType,
@@ -17,6 +28,9 @@ import {
   serializeDynamicQuestionAnswer,
 } from '@/lib/onboarding-answers';
 import type { ThemeTweaks } from '@/lib/tokens';
+
+const PROGRESS_SYNC_DEBOUNCE_MS = 1200;
+const ALLOWED_ONBOARDING_STEPS = new Set(['welcome', 'basic', 'select', 'scale', 'scaleResult']);
 
 // 员工心理测评 · 完整流程页面
 // 步骤：欢迎 → 基础信息（含知情同意）→ 量表选择 → 单量表作答 → 量表结果 → 返回继续选择
@@ -47,6 +61,7 @@ const OnboardingAssessment = ({
   slogan = '专业测评，贴心陪伴',
   homeHref = '/',
   slug,
+  accountId = null,
   apiBaseUrl = '',
   employeeInfoFields,
   customEmployeeInfoFields,
@@ -59,6 +74,8 @@ const OnboardingAssessment = ({
   slogan?: string;
   homeHref?: string;
   slug?: string;
+  /** 企业站点人员 Id；有值时 localStorage 按账号隔离并同步服务端进度 */
+  accountId?: number | null;
   apiBaseUrl?: string;
   employeeInfoFields?: string[];
   customEmployeeInfoFields?: Array<{ id: string; label: string }>;
@@ -68,14 +85,16 @@ const OnboardingAssessment = ({
   const accent = tweaks?.accent || '#C8161D';
   const warm = tweaks?.warm || '#F5EFE6';
   const activeScales = Array.isArray(scales) && scales.length > 0 ? scales : SCALES;
-  const storageScope = slug || companyName || 'default';
-  const progressKey = `onb-step-${storageScope}`;
-  const answersKey = `onb-answers-${storageScope}`;
-  const basicKey = `onb-basic-${storageScope}`;
-  const visitorKeyStorage = `onb-visitor-${storageScope}`;
-  const completedKey = `onb-completed-${storageScope}`;
-  const resultsKey = `onb-results-${storageScope}`;
-  const allowedSteps = new Set(['welcome', 'basic', 'select', 'scale', 'scaleResult']);
+  const storageScope = onboardingStorageScope(slug || companyName || 'default', accountId);
+  const {
+    progressKey,
+    answersKey,
+    basicKey,
+    completedKey,
+    resultsKey,
+    visitorKeyStorage,
+  } = onboardingStorageKeys(storageScope, slug, accountId);
+  const syncToServer = Boolean(slug && accountId);
 
   // 服务端与首屏客户端统一从 welcome 开始，避免 localStorage 造成 hydration 报错
   const [step, setStep] = React.useState('welcome');
@@ -88,7 +107,10 @@ const OnboardingAssessment = ({
   const [progressReady, setProgressReady] = React.useState(false);
   const [submitError, setSubmitError] = React.useState('');
   const [submitting, setSubmitting] = React.useState(false);
+  const [syncNotice, setSyncNotice] = React.useState('');
   const submittingRef = React.useRef(false);
+  const serverUpdatedAtRef = React.useRef(null);
+  const suppressServerSyncRef = React.useRef(true);
 
   const activeScale = React.useMemo(
     () => activeScales.find((s) => s?.id === activeScaleId) || null,
@@ -119,49 +141,176 @@ const OnboardingAssessment = ({
   }, [activeScaleId, activeScales, completedScaleIds]);
   const scaleSubmitLabel = hasMoreScalesAfterSubmit ? '继续作答 →' : '提交作答结果 →';
 
-  React.useEffect(() => {
+  const normalizeRestorableStep = React.useCallback((raw) => {
+    let saved = String(raw || '');
+    if (saved === 'consent') saved = 'basic';
+    if (saved === 'complete' || saved === 'report' || saved === 'scale' || saved === 'scaleResult') {
+      saved = 'select';
+    }
+    if (saved && ALLOWED_ONBOARDING_STEPS.has(saved) && saved !== 'scale' && saved !== 'scaleResult') {
+      return saved;
+    }
+    return null;
+  }, []);
+
+  const applyProgressSnapshot = React.useCallback((snap: OnboardingProgressSnapshot) => {
+    const restored = normalizeRestorableStep(snap.step);
+    if (restored) setStep(restored);
+    if (snap.answersByScale && typeof snap.answersByScale === 'object') {
+      setAnswersByScale(snap.answersByScale);
+    }
+    if (snap.basicInfo && typeof snap.basicInfo === 'object') {
+      setBasicForm({ ...EMPTY_BASIC_FORM, ...snap.basicInfo });
+    }
+    if (Array.isArray(snap.completedScaleIds)) {
+      setCompletedScaleIds(snap.completedScaleIds.map(String));
+    }
+    if (snap.resultsByScale && typeof snap.resultsByScale === 'object') {
+      setResultsByScale(snap.resultsByScale);
+    }
+    if (snap.activeScaleId) setActiveScaleId(String(snap.activeScaleId));
+    serverUpdatedAtRef.current = snap.updatedAt || null;
+  }, [normalizeRestorableStep]);
+
+  const buildProgressPutBody = React.useCallback((overrides = {}) => {
+    const nextCompleted = overrides.completedScaleIds || completedScaleIds;
+    const nextResults = overrides.resultsByScale || resultsByScale;
+    const nextAnswers = overrides.answersByScale || answersByScale;
+    const nextBasic = overrides.basicInfo || basicForm;
+    const nextStep = overrides.step || step;
+    const persistStep = (nextStep === 'scale' || nextStep === 'scaleResult') ? 'select' : nextStep;
+    const allScaleIds = activeScales.map((s) => s?.id).filter(Boolean);
+    const doneSet = new Set((nextCompleted || []).map(String));
+    const fullyDone = allScaleIds.length > 0 && allScaleIds.every((id) => doneSet.has(String(id)));
+    return {
+      step: persistStep,
+      activeScaleId: overrides.activeScaleId != null ? overrides.activeScaleId : activeScaleId,
+      answersByScale: nextAnswers,
+      basicInfo: nextBasic,
+      completedScaleIds: (nextCompleted || []).map(String),
+      resultsByScale: nextResults,
+      status: fullyDone ? 'completed' : (overrides.status || 'in_progress'),
+      clientUpdatedAt: serverUpdatedAtRef.current,
+    };
+  }, [
+    activeScaleId,
+    activeScales,
+    answersByScale,
+    basicForm,
+    completedScaleIds,
+    resultsByScale,
+    step,
+  ]);
+
+  const flushProgressToServer = React.useCallback(async (overrides = {}, options = {}) => {
+    if (!syncToServer || !slug) return null;
+    const retry = Boolean(options.retry);
+    const applyRemote = Boolean(options.applyRemote);
     try {
-      let saved = localStorage.getItem(progressKey);
-      // 兼容旧流程步骤
-      if (saved === 'consent') saved = 'basic';
-      if (saved === 'complete' || saved === 'report' || saved === 'scale') saved = 'select';
-      if (saved && allowedSteps.has(saved) && saved !== 'scale' && saved !== 'scaleResult') {
-        setStep(saved);
+      const body = buildProgressPutBody(overrides);
+      const saved = retry
+        ? await putEnterpriseOnboardingProgressWithRetry(apiBaseUrl, slug, body)
+        : await putEnterpriseOnboardingProgress(apiBaseUrl, slug, body);
+      if (saved?.updatedAt) serverUpdatedAtRef.current = saved.updatedAt;
+      // 仅在提交后对齐时回写服务端校准结果，避免防抖保存反复 setState
+      if (applyRemote && saved) {
+        suppressServerSyncRef.current = true;
+        applyProgressSnapshot(saved);
+        queueMicrotask(() => { suppressServerSyncRef.current = false; });
       }
-      const savedAnswers = localStorage.getItem(answersKey);
-      if (savedAnswers) {
-        const parsed = JSON.parse(savedAnswers);
-        if (parsed && typeof parsed === 'object') setAnswersByScale(parsed);
+      return saved;
+    } catch (error) {
+      if (error instanceof OnboardingProgressConflictError) {
+        suppressServerSyncRef.current = true;
+        applyProgressSnapshot(error.progress);
+        setSyncNotice('其他设备已更新进度，已加载最新内容');
+        queueMicrotask(() => { suppressServerSyncRef.current = false; });
+        return error.progress;
       }
-      const savedBasic = localStorage.getItem(basicKey);
-      if (savedBasic) {
-        const parsed = JSON.parse(savedBasic);
-        if (parsed && typeof parsed === 'object') {
-          setBasicForm({ ...EMPTY_BASIC_FORM, ...parsed });
+      // 网络失败不打断作答；本机 localStorage 仍可续
+      return null;
+    }
+  }, [apiBaseUrl, applyProgressSnapshot, buildProgressPutBody, slug, syncToServer]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        if (accountId && slug) {
+          writeEnterpriseAccountId(slug, accountId);
+          purgeLegacySharedOnboardingKeys(slug);
+        }
+        let saved = localStorage.getItem(progressKey);
+        const restored = normalizeRestorableStep(saved);
+        if (restored) setStep(restored);
+        const savedAnswers = localStorage.getItem(answersKey);
+        if (savedAnswers) {
+          const parsed = JSON.parse(savedAnswers);
+          if (parsed && typeof parsed === 'object') setAnswersByScale(parsed);
+        }
+        const savedBasic = localStorage.getItem(basicKey);
+        if (savedBasic) {
+          const parsed = JSON.parse(savedBasic);
+          if (parsed && typeof parsed === 'object') {
+            setBasicForm({ ...EMPTY_BASIC_FORM, ...parsed });
+          }
+        }
+        const savedCompleted = localStorage.getItem(completedKey);
+        if (savedCompleted) {
+          const parsed = JSON.parse(savedCompleted);
+          if (Array.isArray(parsed)) setCompletedScaleIds(parsed.map(String));
+        }
+        const savedResults = localStorage.getItem(resultsKey);
+        if (savedResults) {
+          const parsed = JSON.parse(savedResults);
+          if (parsed && typeof parsed === 'object') setResultsByScale(parsed);
+        }
+        const key = slug
+          ? getEnterpriseVisitorKey(slug, accountId)
+          : (() => {
+              let local = localStorage.getItem(visitorKeyStorage) || '';
+              if (local.length < 8) {
+                local = createVisitorKey();
+                localStorage.setItem(visitorKeyStorage, local);
+              }
+              return local;
+            })();
+        if (!cancelled) setVisitorKey(key);
+
+        if (syncToServer && slug) {
+          const remote = await fetchEnterpriseOnboardingProgress(apiBaseUrl, slug);
+          // 服务端已按正式答卷校准；有进度行或有已提交报告都应用
+          if (!cancelled && remote && (remote.exists || (remote.completedScaleIds || []).length > 0)) {
+            applyProgressSnapshot(remote);
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          const key = slug ? getEnterpriseVisitorKey(slug, accountId) : createVisitorKey();
+          setVisitorKey(key);
+        }
+      } finally {
+        if (!cancelled) {
+          suppressServerSyncRef.current = false;
+          setProgressReady(true);
         }
       }
-      const savedCompleted = localStorage.getItem(completedKey);
-      if (savedCompleted) {
-        const parsed = JSON.parse(savedCompleted);
-        if (Array.isArray(parsed)) setCompletedScaleIds(parsed.map(String));
-      }
-      const savedResults = localStorage.getItem(resultsKey);
-      if (savedResults) {
-        const parsed = JSON.parse(savedResults);
-        if (parsed && typeof parsed === 'object') setResultsByScale(parsed);
-      }
-      let key = localStorage.getItem(visitorKeyStorage) || '';
-      if (key.length < 8) {
-        key = createVisitorKey();
-        localStorage.setItem(visitorKeyStorage, key);
-      }
-      setVisitorKey(key);
-    } catch {
-      const key = createVisitorKey();
-      setVisitorKey(key);
-    }
-    setProgressReady(true);
-  }, [progressKey, answersKey, basicKey, visitorKeyStorage, completedKey, resultsKey]);
+    })();
+    return () => { cancelled = true; };
+  }, [
+    accountId,
+    answersKey,
+    apiBaseUrl,
+    applyProgressSnapshot,
+    basicKey,
+    completedKey,
+    normalizeRestorableStep,
+    progressKey,
+    resultsKey,
+    slug,
+    syncToServer,
+    visitorKeyStorage,
+  ]);
 
   React.useEffect(() => {
     if (!progressReady) return;
@@ -194,6 +343,30 @@ const OnboardingAssessment = ({
     if (!progressReady) return;
     try { localStorage.setItem(resultsKey, JSON.stringify(resultsByScale)); } catch {}
   }, [resultsKey, resultsByScale, progressReady]);
+
+  // 登录账号：作答等变更防抖同步到服务端（跨设备续答）
+  React.useEffect(() => {
+    if (!progressReady || !syncToServer || suppressServerSyncRef.current) return;
+    const timer = window.setTimeout(() => {
+      void flushProgressToServer();
+    }, PROGRESS_SYNC_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [
+    answersByScale,
+    basicForm,
+    completedScaleIds,
+    flushProgressToServer,
+    progressReady,
+    resultsByScale,
+    step,
+    syncToServer,
+  ]);
+
+  React.useEffect(() => {
+    if (!syncNotice) return;
+    const timer = window.setTimeout(() => setSyncNotice(''), 4000);
+    return () => window.clearTimeout(timer);
+  }, [syncNotice]);
 
   React.useEffect(() => {
     try {
@@ -344,6 +517,15 @@ const OnboardingAssessment = ({
         };
         setSubmitError('');
         markScaleCompleted(scale.id, mock);
+        const nextCompleted = completedScaleIds.includes(scale.id)
+          ? completedScaleIds
+          : [...completedScaleIds, scale.id];
+        const nextResults = { ...resultsByScale, [scale.id]: mock };
+        void flushProgressToServer({
+          step: 'select',
+          completedScaleIds: nextCompleted,
+          resultsByScale: nextResults,
+        });
         advanceAfterScaleSubmit(scale.id);
         return;
       }
@@ -359,6 +541,7 @@ const OnboardingAssessment = ({
         }],
       });
       const saved = Array.isArray(response?.reports) ? response.reports[0] : null;
+      const submittedAt = new Date().toISOString();
       const reportPayload = {
         assessmentId: scale.id,
         publicId: saved?.publicId,
@@ -367,9 +550,24 @@ const OnboardingAssessment = ({
         scoringType: saved?.scoringType,
         resultSummary: saved?.resultSummary || '',
         result: saved?.result || null,
+        submittedAt,
+        completedAt: submittedAt,
       };
       setSubmitError('');
       markScaleCompleted(scale.id, reportPayload);
+      const nextCompleted = completedScaleIds.includes(scale.id)
+        ? completedScaleIds
+        : [...completedScaleIds, scale.id];
+      const nextResults = { ...resultsByScale, [scale.id]: reportPayload };
+      // 正式结果已落库：重试写回进度（含 publicId），以服务端校准结果为准
+      const synced = await flushProgressToServer({
+        step: 'select',
+        completedScaleIds: nextCompleted,
+        resultsByScale: nextResults,
+      }, { retry: true, applyRemote: true });
+      if (!synced) {
+        setSyncNotice('答卷已提交，进度同步稍后重试');
+      }
       advanceAfterScaleSubmit(scale.id);
     } catch (error) {
       const message = error instanceof Error ? error.message : '提交失败，请稍后重试';
@@ -385,7 +583,10 @@ const OnboardingAssessment = ({
     apiBaseUrl,
     basicForm,
     buildAnswersForScale,
+    completedScaleIds,
+    flushProgressToServer,
     markScaleCompleted,
+    resultsByScale,
     slug,
     visitorKey,
   ]);
@@ -404,6 +605,24 @@ const OnboardingAssessment = ({
       <OnbHeader primary={primary} primaryDark={primaryDark} step={step} companyName={companyName} siteName={siteName} logoUrl={logoUrl} homeHref={homeHref}/>
 
       {showStepper && <OnbStepper primary={primary} step={step}/>}
+
+      {syncNotice ? (
+        <div
+          role="status"
+          style={{
+            maxWidth: 1120,
+            margin: '12px auto 0',
+            padding: '10px 16px',
+            background: '#FFF8E8',
+            border: '1px solid #E8D4A8',
+            color: '#6B5420',
+            fontSize: 13,
+            borderRadius: 6,
+          }}
+        >
+          {syncNotice}
+        </div>
+      ) : null}
 
       <main className="gxa-onb-main" style={{ maxWidth: 1120, margin: '0 auto', padding: '40px 40px 120px' }}>
         {step === 'welcome' && (

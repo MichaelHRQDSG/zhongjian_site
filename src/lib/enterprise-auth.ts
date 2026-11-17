@@ -1,7 +1,10 @@
 const TOKEN_PREFIX = "eap_ent_token_";
 const COOKIE_PREFIX = "eap_ent_";
+const ACCOUNT_PREFIX = "eap_ent_account_";
 
 export interface EnterpriseSiteProfile {
+  /** 企业站点人员表主键，用于测评进度按账号隔离 */
+  id?: number;
   username: string;
   role: "employee" | "admin" | string;
   realName?: string;
@@ -41,9 +44,36 @@ export function writeEnterpriseToken(slug: string, token: string) {
   document.cookie = `${COOKIE_PREFIX}${slug}=${encodeURIComponent(token)}; path=/; max-age=${maxAge}; SameSite=Lax`;
 }
 
+export function enterpriseAccountStorageKey(slug: string) {
+  return `${ACCOUNT_PREFIX}${slug}`;
+}
+
+/** 缓存当前登录人员 Id，供 visitorKey / 进度按账号隔离。 */
+export function writeEnterpriseAccountId(slug: string, accountId?: number | string | null) {
+  if (!slug || !canUseWindow()) return;
+  if (accountId == null || accountId === "") {
+    window.localStorage.removeItem(enterpriseAccountStorageKey(slug));
+    return;
+  }
+  window.localStorage.setItem(enterpriseAccountStorageKey(slug), String(accountId));
+}
+
+export function readEnterpriseAccountId(slug: string): number | null {
+  if (!slug || !canUseWindow()) return null;
+  const raw = window.localStorage.getItem(enterpriseAccountStorageKey(slug)) || "";
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+export function clearEnterpriseAccountId(slug: string) {
+  if (!slug || !canUseWindow()) return;
+  window.localStorage.removeItem(enterpriseAccountStorageKey(slug));
+}
+
 export function clearEnterpriseToken(slug: string) {
   if (!slug || !canUseWindow()) return;
   window.localStorage.removeItem(enterpriseTokenStorageKey(slug));
+  clearEnterpriseAccountId(slug);
   document.cookie = `${COOKIE_PREFIX}${slug}=; path=/; max-age=0; SameSite=Lax`;
 }
 
@@ -64,6 +94,14 @@ export async function fetchEnterpriseAuthStatus(apiBaseUrl: string, slug: string
   );
   const raw = await response.json().catch(() => ({}));
   const payload = unwrap(raw);
+  const profile =
+    payload.profile && typeof payload.profile === "object"
+      ? (payload.profile as EnterpriseSiteProfile)
+      : null;
+  if (profile?.id) writeEnterpriseAccountId(slug, profile.id);
+  else if (payload.loginRequired && payload.authenticated === false) {
+    clearEnterpriseAccountId(slug);
+  }
   return {
     loginRequired: Boolean(payload.loginRequired),
     authenticated: payload.authenticated !== false,
@@ -71,9 +109,7 @@ export async function fetchEnterpriseAuthStatus(apiBaseUrl: string, slug: string
     companyName: String(payload.companyName || ""),
     logoUrl: String(payload.logoUrl || ""),
     slogan: String(payload.slogan || ""),
-    profile: payload.profile && typeof payload.profile === "object"
-      ? (payload.profile as EnterpriseSiteProfile)
-      : null,
+    profile,
   } as EnterpriseAuthStatus;
 }
 
@@ -100,6 +136,11 @@ export async function loginEnterpriseSite(
   const token = String(payload.token || "");
   if (!token) throw new Error("登录失败，请稍后重试");
   writeEnterpriseToken(slug, token);
+  const profile =
+    payload.profile && typeof payload.profile === "object"
+      ? (payload.profile as EnterpriseSiteProfile)
+      : null;
+  if (profile?.id) writeEnterpriseAccountId(slug, profile.id);
   return payload;
 }
 

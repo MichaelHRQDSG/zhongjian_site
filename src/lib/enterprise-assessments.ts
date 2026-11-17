@@ -70,10 +70,19 @@ type EnterpriseAssessmentReportStructure = Pick<
   | "sourceReports"
 >;
 
+export interface EnterpriseSessionUser {
+  id?: number;
+  username?: string;
+  role?: string;
+  realName?: string;
+  empNo?: string;
+}
+
 export interface EnterpriseAssessmentPayload extends SiteBranding {
   slug: string;
   loginRequired?: boolean;
   authenticated?: boolean;
+  sessionUser?: EnterpriseSessionUser | null;
   /** 企业链接需展示的员工基本信息字段 ID；未返回时前端按全部字段处理 */
   employeeInfoFields?: string[];
   /** 仅当前企业新增的字段定义，未勾选的不会出现在 employeeInfoFields 里 */

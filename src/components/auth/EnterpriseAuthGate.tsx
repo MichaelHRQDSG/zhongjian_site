@@ -23,6 +23,7 @@ import {
   ENTERPRISE_QUERY_KEY,
   normalizeEnterpriseSlug,
 } from '@/lib/enterprise-context';
+import { clearEnterpriseOnboardingLocal } from '@/lib/enterprise-onboarding-progress';
 
 /** 状态接口不可用时与原逻辑一致：放行页面，真正的数据仍由后端按登录态控制。 */
 const UNREACHABLE_STATUS: EnterpriseAuthStatus = {
@@ -131,6 +132,7 @@ export function EnterpriseAuthGate({
   const brand = brandFromStatus(status);
   const homeHref = `/${slug}`;
   const logout = () => {
+    clearEnterpriseOnboardingLocal(slug, status?.profile?.id);
     clearEnterpriseToken(slug);
     // 二级页面都需要登录，退出后回到首页
     if (isHome) window.location.reload();
