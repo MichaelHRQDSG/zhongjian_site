@@ -1523,39 +1523,39 @@ const StepBasic = ({ primary, primaryDark, onNext, onBack, visibleFields, custom
       <div className="gxa-consent-card" style={{ background: '#fff', borderRadius: 8, padding: 40, marginTop: 32, boxShadow: '0 2px 20px rgba(15,46,95,.04)' }}>
         {showPersonal && (
           <>
-            <FormGroupTitle primary={primary} icon="edit">个人信息</FormGroupTitle>
+        <FormGroupTitle primary={primary} icon="edit">个人信息</FormGroupTitle>
             <div className="gxa-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               {show('empNo') && (
                 <FormField label="工号" required={required.includes('empNo')}>
-                  <input type="text" placeholder="例如 CSCEC-3B-20260901" value={form.empNo} onChange={e => set('empNo', e.target.value)} style={fieldStyle}/>
-                </FormField>
+            <input type="text" placeholder="例如 CSCEC-3B-20260901" value={form.empNo} onChange={e => set('empNo', e.target.value)} style={fieldStyle}/>
+          </FormField>
               )}
               {show('name') && (
                 <FormField label="姓名" required={required.includes('name')}>
-                  <input type="text" placeholder="请输入真实姓名" value={form.name} onChange={e => set('name', e.target.value)} style={fieldStyle}/>
-                </FormField>
+            <input type="text" placeholder="请输入真实姓名" value={form.name} onChange={e => set('name', e.target.value)} style={fieldStyle}/>
+          </FormField>
               )}
               {show('gender') && (
                 <FormField label="性别" required={required.includes('gender')}>
-                  <SegmentedControl options={['男', '女', '不愿透露']} value={form.gender} onChange={v => set('gender', v)} primary={primary}/>
-                </FormField>
+            <SegmentedControl options={['男', '女', '不愿透露']} value={form.gender} onChange={v => set('gender', v)} primary={primary}/>
+          </FormField>
               )}
               {show('age') && (
                 <FormField label="年龄" required={required.includes('age')}>
-                  <SegmentedControl options={['≤22', '23-28', '29-35', '36-45', '46+']} value={form.age} onChange={v => set('age', v)} primary={primary}/>
-                </FormField>
+            <SegmentedControl options={['≤22', '23-28', '29-35', '36-45', '46+']} value={form.age} onChange={v => set('age', v)} primary={primary}/>
+          </FormField>
               )}
               {show('edu') && (
-                <FormField label="学历">
-                  <Select value={form.edu} onChange={v => set('edu', v)} options={['大专', '本科', '硕士', '博士', '其他']}/>
-                </FormField>
+          <FormField label="学历">
+            <Select value={form.edu} onChange={v => set('edu', v)} options={['大专', '本科', '硕士', '博士', '其他']}/>
+          </FormField>
               )}
               {show('joinDate') && (
                 <FormField label="到岗日期">
-                  <input type="date" value={form.joinDate} onChange={e => set('joinDate', e.target.value)} style={fieldStyle}/>
-                </FormField>
+            <input type="date" value={form.joinDate} onChange={e => set('joinDate', e.target.value)} style={fieldStyle}/>
+          </FormField>
               )}
-            </div>
+        </div>
           </>
         )}
 
@@ -1566,24 +1566,24 @@ const StepBasic = ({ primary, primaryDark, onNext, onBack, visibleFields, custom
               {show('dept') && (
                 <FormField label="所属部门" required={required.includes('dept')}>
                   <input type="text" placeholder="例如 人力资源部 / 产品研发部" value={form.dept} onChange={e => set('dept', e.target.value)} style={fieldStyle}/>
-                </FormField>
+          </FormField>
               )}
               {show('post') && (
                 <FormField label="岗位" required={required.includes('post')}>
                   <input type="text" placeholder="例如 产品经理 / 行政专员" value={form.post} onChange={e => set('post', e.target.value)} style={fieldStyle}/>
-                </FormField>
+          </FormField>
               )}
               {show('category') && (
                 <FormField label="岗位类别" required={required.includes('category')}>
                   <SegmentedControl options={['一线业务', '项目管理', '职能支持', '技术研发']} value={form.category} onChange={v => set('category', v)} primary={primary}/>
-                </FormField>
+          </FormField>
               )}
               {show('workLoc') && (
                 <FormField label="工作地" required={required.includes('workLoc')}>
                   <SegmentedControl options={['办公现场', '公司本部', '远程办公']} value={form.workLoc} onChange={v => set('workLoc', v)} primary={primary}/>
-                </FormField>
+          </FormField>
               )}
-            </div>
+        </div>
           </>
         )}
 
@@ -1594,16 +1594,16 @@ const StepBasic = ({ primary, primaryDark, onNext, onBack, visibleFields, custom
             </FormGroupTitle>
             <div className="gxa-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               {show('livingStatus') && (
-                <FormField label="居住状况">
+          <FormField label="居住状况">
                   <SegmentedControl options={['与家人同住', '独居', '单位宿舍', '合租']} value={form.livingStatus} onChange={v => set('livingStatus', v)} primary={primary}/>
-                </FormField>
+          </FormField>
               )}
               {show('hasFamily') && (
-                <FormField label="是否与家人异地">
-                  <SegmentedControl options={['同城', '异地', '暂无家人']} value={form.hasFamily} onChange={v => set('hasFamily', v)} primary={primary}/>
-                </FormField>
+          <FormField label="是否与家人异地">
+            <SegmentedControl options={['同城', '异地', '暂无家人']} value={form.hasFamily} onChange={v => set('hasFamily', v)} primary={primary}/>
+          </FormField>
               )}
-            </div>
+        </div>
           </>
         )}
 
@@ -1843,6 +1843,7 @@ const StepScaleSelect = ({
           return (
             <div
               key={scale.id || index}
+              className="gxa-scale-select-card"
               style={{
                 background: '#fff',
                 borderRadius: 8,
@@ -1853,30 +1854,38 @@ const StepScaleSelect = ({
                 justifyContent: 'space-between',
                 gap: 20,
                 boxShadow: '0 2px 16px rgba(15,46,95,.04)',
+                boxSizing: 'border-box',
+                width: '100%',
+                overflow: 'hidden',
               }}
             >
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <div className="gxa-scale-select-copy" style={{ minWidth: 0, flex: 1 }}>
+                <div className="gxa-scale-select-heading" style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
                   <div style={{
                     width: 28, height: 28, borderRadius: '50%',
                     background: done ? primary : `${primary}12`,
                     color: done ? '#fff' : primary,
                     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 13, fontWeight: 700, flexShrink: 0,
+                    fontSize: 13, fontWeight: 700, flexShrink: 0, marginTop: 2,
                   }}>
                     {done ? <Icon name="check" size={14}/> : index + 1}
                   </div>
-                  <h3 style={{
-                    margin: 0, fontSize: 18, fontWeight: 700, color: '#0F2E5F',
-                    fontFamily: '"Noto Serif SC", serif', letterSpacing: 0.5,
-                    wordBreak: 'break-word',
-                  }}>
+                  <h3
+                    className="gxa-scale-select-name"
+                    style={{
+                      margin: 0, fontSize: 18, fontWeight: 700, color: '#0F2E5F',
+                      fontFamily: '"Noto Serif SC", serif', letterSpacing: 0.5,
+                      lineHeight: 1.45, flex: '1 1 160px', minWidth: 0,
+                      wordBreak: 'break-word', overflowWrap: 'anywhere',
+                    }}
+                  >
                     {scale.name}
                   </h3>
                   {done || inProgress ? (
                     <span style={{
                       fontSize: 11, fontWeight: 600, color: primary,
                       background: `${primary}12`, padding: '3px 8px', borderRadius: 999,
+                      flexShrink: 0,
                     }}>
                       {done ? '已完成' : '作答中'}
                     </span>
@@ -1885,17 +1894,18 @@ const StepScaleSelect = ({
                     <span style={{
                       fontSize: 11, fontWeight: 600, color: '#8F6510',
                       background: '#E0A5281C', padding: '3px 8px', borderRadius: 999,
+                      flexShrink: 0,
                     }}>
                       重新作答中
                     </span>
                   ) : null}
                 </div>
                 {scale.subtitle ? (
-                  <div style={{ marginTop: 8, marginLeft: 38, fontSize: 13, color: '#4A5A78', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                  <div className="gxa-scale-select-sub" style={{ marginTop: 8, marginLeft: 38, fontSize: 13, color: '#4A5A78', lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
                     {scale.subtitle}
                   </div>
                 ) : null}
-                <div style={{ marginTop: 10, marginLeft: 38, display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 12, color: '#8B96A8' }}>
+                <div className="gxa-scale-select-meta" style={{ marginTop: 10, marginLeft: 38, display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 12, color: '#8B96A8' }}>
                   <span>共 {scale.total || scale.items?.length || 0} 题</span>
                   {scale.dur ? <span>约 {scale.dur}</span> : null}
                   {draft && draft.answered > 0 ? (
@@ -2991,13 +3001,18 @@ const StepReport = ({
       ) : null}
 
       {showResultPager ? (
-        <div style={{
-          marginBottom: 16, padding: '14px 18px', borderRadius: 8,
-          background: '#fff', border: '1px solid #E8ECF3',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
-        }}>
+        <div
+          className="gxa-report-pager"
+          style={{
+            marginBottom: 16, padding: '14px 18px', borderRadius: 8,
+            background: '#fff', border: '1px solid #E8ECF3',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
+            boxSizing: 'border-box', width: '100%',
+          }}
+        >
           <button
             type="button"
+            className="gxa-report-pager-btn"
             onClick={onPrevResult}
             disabled={resultPageIndex <= 0 || typeof onPrevResult !== 'function'}
             style={{
@@ -3009,16 +3024,27 @@ const StepReport = ({
           >
             ← 上一张结果
           </button>
-          <div style={{ fontSize: 14, color: '#0F2E5F', fontWeight: 600, textAlign: 'center', flex: 1, minWidth: 140 }}>
+          <div
+            className="gxa-report-pager-name"
+            style={{
+              fontSize: 14, color: '#0F2E5F', fontWeight: 600, textAlign: 'center',
+              flex: 1, minWidth: 0, maxWidth: '100%',
+              wordBreak: 'break-word', overflowWrap: 'anywhere',
+            }}
+          >
             作答结果 {resultPageIndex + 1} / {resultPageTotal}
             {scale?.name ? (
-              <span style={{ display: 'block', marginTop: 4, fontSize: 13, fontWeight: 500, color: '#4A5A78' }}>
+              <span style={{
+                display: 'block', marginTop: 4, fontSize: 13, fontWeight: 500, color: '#4A5A78',
+                lineHeight: 1.45, wordBreak: 'break-word', overflowWrap: 'anywhere',
+              }}>
                 {scale.name}
               </span>
             ) : null}
           </div>
           <button
             type="button"
+            className="gxa-report-pager-btn"
             onClick={onNextResult}
             disabled={resultPageIndex >= resultPageTotal - 1 || typeof onNextResult !== 'function'}
             style={{
@@ -3055,7 +3081,7 @@ const StepReport = ({
               <span>基于 {assessmentCount} 个量表 · {questionCount} 项作答</span>
               <span className="gxa-report-meta-dot">·</span>
               <span>分数与解读来自本次真实计分</span>
-            </div>
+          </div>
           </div>
 
           {ring ? (
@@ -3141,12 +3167,12 @@ const StepReport = ({
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '22px 0 4px' }}>
                   <span style={{ width: 4, height: 16, borderRadius: 2, background: primary }}/>
                   <span style={{ fontSize: 15, fontWeight: 700, color: '#0F2E5F', fontFamily: SERIF }}>{group.title}</span>
-                </div>
+              </div>
               ) : null}
               {group.items.map((item) => (
                 <ZjDimensionCard key={item.id} item={item} primary={primary}/>
             ))}
-          </div>
+            </div>
           ))}
         </div>
       ) : null}
@@ -3173,20 +3199,20 @@ const StepReport = ({
       {!model ? (
         <div className="gxa-report-panel" style={{ background: '#fff', borderRadius: 8, padding: 32, marginTop: 24, boxShadow: '0 2px 20px rgba(15,46,95,.04)', fontSize: 14, color: '#4A5A78', lineHeight: 1.8 }}>
           已成功提交本量表。详细解读可在管理端量表结果中查看，或稍后刷新本页。
-        </div>
+                  </div>
       ) : null}
 
       {Array.isArray(scales) && scales.length > 0 ? (
         <div className="gxa-report-panel" style={{ background: '#fff', borderRadius: 8, padding: 24, marginTop: 24, boxShadow: '0 2px 20px rgba(15,46,95,.04)', fontSize: 13, color: '#4A5A78', lineHeight: 1.8, wordBreak: 'break-word' }}>
           本次结果来自：{scales.map((item) => item.name || item.id).filter(Boolean).join('、')}。
-        </div>
+                  </div>
       ) : null}
 
       <div className="gxa-report-panel" style={{ background: '#fff', borderRadius: 8, padding: 40, marginTop: 24, boxShadow: '0 2px 20px rgba(15,46,95,.04)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
           <Icon name="sparkle" size={22} color={primary}/>
           <h3 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#0F2E5F', fontFamily: SERIF }}>给你的 3 条个性化建议</h3>
-        </div>
+                </div>
         <p style={{ fontSize: 13, color: '#4A5A78', margin: '0 0 24px' }}>根据本次测评结果整理的关注重点</p>
 
         <div className="gxa-report-tips" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
@@ -3198,10 +3224,10 @@ const StepReport = ({
               </div>
               <h4 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: '#0F2E5F', fontFamily: SERIF, wordBreak: 'break-word' }}>{s.title}</h4>
               <p style={{ fontSize: 13, color: '#4A5A78', lineHeight: 1.8, marginTop: 8, marginBottom: 0, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{s.desc}</p>
-            </div>
-          ))}
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
 
       {showResultPager ? (
                 <div style={{
@@ -3221,10 +3247,10 @@ const StepReport = ({
             }}
           >
             ← 上一张结果
-                </button>
+          </button>
           <div style={{ fontSize: 14, color: '#4A5A78', textAlign: 'center', flex: 1 }}>
             {resultPageIndex + 1} / {resultPageTotal}
-              </div>
+        </div>
           <button
             type="button"
             onClick={onNextResult}
@@ -3239,7 +3265,7 @@ const StepReport = ({
           >
             下一张结果 →
           </button>
-        </div>
+      </div>
       ) : null}
 
       <div className="gxa-report-actions" style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 40, flexWrap: 'wrap' }}>
@@ -3250,7 +3276,7 @@ const StepReport = ({
             style={{ background: '#fff', color: '#0F2E5F', border: '1px solid #E0E4EC', padding: '12px 22px', borderRadius: 4, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxSizing: 'border-box' }}
           >
             ← 返回量表选择
-          </button>
+        </button>
         ) : null}
         {typeof onDownload === 'function' ? (
           <button
@@ -3261,7 +3287,7 @@ const StepReport = ({
             style={{ background: primary, color: '#fff', border: `1px solid ${primary}`, padding: '12px 22px', borderRadius: 4, fontSize: 14, fontWeight: 600, cursor: downloadState.busy ? 'wait' : 'pointer', opacity: downloadState.busy ? 0.7 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxSizing: 'border-box', boxShadow: `0 10px 22px -12px ${primary}` }}
           >
             <Icon name="edit" size={14}/> {downloadState.busy ? '正在生成报告…' : '下载完整报告 PDF'}
-          </button>
+        </button>
         ) : null}
         <a href={homeHref} style={{ background: '#fff', color: '#0F2E5F', border: '1px solid #E0E4EC', padding: '12px 22px', borderRadius: 4, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, textDecoration: 'none', boxSizing: 'border-box' }}>
           返回{siteName}首页 <Icon name="arrow" size={14}/>
